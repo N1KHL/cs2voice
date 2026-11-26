@@ -108,6 +108,7 @@ func main() {
 	registerPreview()
 	registerExport()
 	registerCut()
+	registerSession()
 
 	select {}
 }
@@ -120,21 +121,32 @@ func openDemo(file, onProgress js.Value) (*MatchView, error) {
 	if err != nil {
 		return nil, err
 	}
+	return installMatch(m), nil
+}
+
+// installMatch applies the all-talk rules and makes m the open match, for a
+// freshly parsed demo and for one restored from the cache alike. Its own
+// warnings go to the view only, so m stays as parsed and caching it, then
+// installing it again, never repeats them.
+func installMatch(m *demo.Match) *MatchView {
+	warnings := append([]string(nil), m.Warnings...)
 	rules.Apply(m)
 	if m.VoiceFormat == "" {
-		m.Warnings = append(m.Warnings, "This demo has no voice. Valve Matchmaking demos never have voice; other servers record it only with tv_relayvoice.")
+		warnings = append(warnings, "This demo has no voice. Valve Matchmaking demos never have voice; other servers record it only with tv_relayvoice.")
 	}
 	mu.Lock()
 	currentMatch = m
 	mu.Unlock()
-	return matchView(m), nil
+	v := matchView(m)
+	v.Warnings = warnings
+	return v
 }
 
 func matchView(m *demo.Match) *MatchView {
 	v := &MatchView{
 		File: m.File, Map: m.Map, Server: m.Server, FaceitMatchID: m.FaceitMatchID,
 		Platform: m.Platform, GameVersion: m.GameVersion, Duration: m.Duration,
-		VoiceFormat: m.VoiceFormat, AllTalkSource: m.AllTalkSource, Warnings: m.Warnings,
+		VoiceFormat: m.VoiceFormat, AllTalkSource: m.AllTalkSource,
 	}
 	var ids []uint64
 	for _, p := range m.Players {
