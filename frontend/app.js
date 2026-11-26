@@ -74,7 +74,7 @@ async function openDemo(file) {
 
   let match;
   try {
-    match = await api('OpenDemo', file);
+    ({ match } = await api('OpenDemo', file));
   } catch (e) {
     $('#loading').classList.add('hidden');
     if (M) applyTab(); else $('#empty').classList.remove('hidden');
