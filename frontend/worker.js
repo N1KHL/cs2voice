@@ -133,9 +133,31 @@ async function restoreCached(key) {
   return null;
 }
 
+// storeCalls only touch the saved-demo cache, so they answer without waiting
+// for the Go runtime (the recent list shows up before main.wasm has loaded).
+const storeCalls = {
+  async ListRecent() {
+    return opfsStore.available()
+      ? { available: true, entries: await opfsStore.list() }
+      : { available: false, entries: [] };
+  },
+  async ForgetDemo(key) {
+    await opfsStore.remove(String(key || ''));
+    return true;
+  },
+  async ClearSaved() {
+    await opfsStore.clear();
+    return true;
+  },
+};
+
 self.onmessage = async ({ data }) => {
   const { id, name, args = [] } = data;
   try {
+    if (Object.hasOwn(storeCalls, name)) {
+      self.postMessage({ id, result: await storeCalls[name](...args) });
+      return;
+    }
     if (wasmCrashed) throw wasmCrashed;
     await wasmReady;
     if (wasmCrashed) throw wasmCrashed;
@@ -172,24 +194,6 @@ self.onmessage = async ({ data }) => {
         self.postMessage({ id, result: true });
         break;
       }
-
-      case 'ListRecent': {
-        const result = opfsStore.available()
-          ? { available: true, entries: await opfsStore.list() }
-          : { available: false, entries: [] };
-        self.postMessage({ id, result });
-        break;
-      }
-
-      case 'ForgetDemo':
-        await opfsStore.remove(String(args[0] || ''));
-        self.postMessage({ id, result: true });
-        break;
-
-      case 'ClearSaved':
-        await opfsStore.clear();
-        self.postMessage({ id, result: true });
-        break;
 
       case 'About': {
         const result = JSON.parse(cs2about());
