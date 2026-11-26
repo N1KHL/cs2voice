@@ -1,0 +1,19 @@
+# build output
+build/web/
+*.exe
+
+# demo files (large, and contain other people's voices)
+*.dem
+*.dem.zst
+
+# Go test / tool output
+*.test
+*.out
+coverage*
+
+# local editor / OS / agent files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.claude/settings.local.json

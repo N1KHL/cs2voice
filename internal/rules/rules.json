@@ -1,0 +1,33 @@
+{
+  "_comment": [
+    "Manually updated list: per platform, from which CS2 game version (stored in the demo,",
+    "e.g. 14201) the server MAY announce all-talk in the chat. Each entry applies from",
+    "from_game_version until the next entry.",
+    "",
+    "alltalk_notices true : look for on_text / off_text in the server chat; those times are",
+    "                       all-talk (both teams mixed). No notice found = no all-talk.",
+    "alltalk_notices false: never all-talk during the match.",
+    "In doubt (unknown platform/version): false. Never mix both teams without proof.",
+    "",
+    "If FACEIT stops announcing it or changes the text in a new game version, add an entry",
+    "with that from_game_version."
+  ],
+  "platforms": {
+    "faceit": [
+      {
+        "from_game_version": 0,
+        "alltalk_notices": true,
+        "on_text": ["Alltalk enabled"],
+        "off_text": ["Alltalk disabled"],
+        "warmup_all_talk": false
+      }
+    ],
+    "other": [
+      {
+        "from_game_version": 0,
+        "alltalk_notices": false,
+        "warmup_all_talk": false
+      }
+    ]
+  }
+}

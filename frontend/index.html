@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CS2 Voice — toxic.report</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <script>
+    // theme before first paint (no flash)
+    try { const th = localStorage.getItem('theme'); document.documentElement.dataset.theme = th || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'); } catch { document.documentElement.dataset.theme = 'dark'; }
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-file-drop-target>
+  <header id="top">
+    <div class="brand">CS2 Voice</div>
+    <button id="open" class="btn primary" data-i18n="app.open">Open demo</button>
+    <input type="file" id="fileinput" accept=".dem,.zst" class="hidden">
+    <nav id="tabs" class="seg tabs hidden">
+      <button data-tab="report" class="on" data-i18n="tab.report">Report</button>
+      <button data-tab="cut" data-i18n="tab.cut">Listen & Cut</button>
+    </nav>
+    <div id="matchinfo" class="matchinfo"></div>
+    <div class="headtools">
+      <select id="lang" class="hidden" data-i18n-title="app.language"></select>
+      <button id="theme" class="btn icon" data-i18n-title="app.theme">◐</button>
+      <a id="github" class="btn icon" href="https://github.com/N1KHL/cs2voice" target="_blank" rel="noopener noreferrer" data-i18n-title="app.github" aria-label="GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+      <button id="about" class="btn icon" data-i18n-title="app.about">ⓘ</button>
+    </div>
+  </header>
+
+  <dialog id="aboutdlg" class="about">
+    <div class="abouthead">
+      <img src="appicon.png" alt="" width="56" height="56">
+      <div>
+        <h2>CS2 Voice</h2>
+        <div class="dim" id="aboutver"></div>
+      </div>
+    </div>
+    <p data-i18n="about.desc">Extracts the players' voice from CS2 demos, so you can listen per round and per team and send clips and a report to FACEIT.</p>
+    <p data-i18n="about.license">Free and open source, under the MIT License.</p>
+    <p data-i18n="about.idea">The idea came from csgo-voice-extractor by akiver.</p>
+    <p data-i18n="about.uses">Built with demoinfocs-golang, WebAssembly, opus-decoder (Opus), and wasm-media-encoders (LAME).</p>
+    <p class="aboutlinks"><a href="https://toxic.report" target="_blank" rel="noopener noreferrer">toxic.report</a> · <a href="https://github.com/N1KHL/cs2voice" target="_blank" rel="noopener noreferrer">github.com/N1KHL/cs2voice</a></p>
+    <pre id="licenses" class="licenses hidden"></pre>
+    <div class="aboutbtns">
+      <button class="btn" id="showlicenses" data-i18n="about.showLicenses">Licenses</button>
+      <button class="btn primary" id="closeabout" data-i18n="about.close">Close</button>
+    </div>
+  </dialog>
+  <div id="warnings" class="warnings hidden"></div>
+
+  <section id="empty" class="empty">
+    <div class="drop">
+      <div class="drop-title" data-i18n="app.dropTitle">Drop a CS2 demo here</div>
+      <div class="drop-sub" data-i18n="app.dropSub">.dem or .dem.zst (FACEIT) — or click Open demo</div>
+      <div class="drop-privacy" data-i18n="app.privacy">Your demo never leaves your computer — everything runs in your browser.</div>
+    </div>
+  </section>
+
+  <section id="loading" class="empty hidden">
+    <div class="drop">
+      <div class="spinner"></div>
+      <div class="drop-title" data-i18n="app.reading">Reading demo…</div>
+      <div id="loadingname" class="drop-sub"></div>
+      <progress id="loadingbar" max="1" value="0"></progress>
+      <div id="loadingpct" class="drop-sub"></div>
+    </div>
+  </section>
+
+  <main id="main" class="hidden">
+    <!-- LEFT: listen -->
+    <section class="panel" id="left">
+      <div class="panel-head">
+        <h2 data-i18n="left.title">Listen</h2>
+        <div class="seg" id="left-team"></div>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <div class="col-head"><span data-i18n="common.rounds">Rounds</span> <span class="links"><a data-act="all" data-i18n="common.all">all</a> · <a data-act="none" data-i18n="common.none">none</a> · <a data-act="talk" data-i18n="common.withTalk">with talk</a></span></div>
+          <div class="list periods"></div>
+        </div>
+        <div class="col">
+          <div class="col-head"><span data-i18n="common.players">Players</span> <span class="links"><a data-act="all" data-i18n="common.all">all</a> · <a data-act="none" data-i18n="common.none">none</a></span></div>
+          <div class="list players"></div>
+        </div>
+      </div>
+      <div class="opts">
+        <div class="seg mode"><button data-mode="compact" class="on" data-i18n="common.talkOnly">Talk only</button><button data-mode="full" data-i18n="common.fullRound">Full round</button></div>
+        <label class="chk"><input type="checkbox" class="normalize"> <span data-i18n="left.normalize">Even out volume (listening only)</span></label>
+      </div>
+      <div class="player"></div>
+    </section>
+
+    <!-- RIGHT: export -->
+    <section class="panel" id="right">
+      <div class="panel-head">
+        <h2 data-i18n="right.title">Export</h2>
+        <div class="seg" id="right-team"></div>
+        <span class="hint" id="right-hint"></span>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <div class="col-head"><span data-i18n="common.rounds">Rounds</span> <span class="links"><a data-act="all" data-i18n="common.all">all</a> · <a data-act="none" data-i18n="common.none">none</a> · <a data-act="copy" data-i18n="right.copyFromListen">copy from Listen</a></span></div>
+          <div class="list periods"></div>
+        </div>
+        <div class="col">
+          <div class="col-head"><span data-i18n="common.players">Players</span> <span class="links"><a data-act="clearrep" data-i18n="right.clearReported">clear reported</a></span></div>
+          <div class="list players"></div>
+        </div>
+      </div>
+      <div class="opts">
+        <div class="seg mode"><button data-mode="compact" class="on" data-i18n="common.talkOnly">Talk only</button><button data-mode="full" data-i18n="common.fullRound">Full round</button></div>
+        <div class="seg split"><button data-split="round" class="on" data-i18n="right.onePerRound">One file per round</button><button data-split="merged" data-i18n="right.oneFile">One file</button></div>
+        <div class="seg format"><button data-format="mp3" class="on">MP3</button><button data-format="wav">WAV</button></div>
+      </div>
+      <div class="opts">
+        <label class="chk"><input type="checkbox" class="incfull" checked> <span data-i18n="right.teamAudio">Team audio</span></label>
+        <label class="chk"><input type="checkbox" class="inciso" checked> <span data-i18n="right.isolated">Separate file for each reported player</span> <span class="isohint"></span></label>
+        <label class="chk matchid hidden" data-i18n-title="right.matchIdTip"><input type="checkbox" class="incid"> <span data-i18n="right.matchId">Match ID in file names</span></label>
+      </div>
+      <div class="files"></div>
+      <div class="player"></div>
+      <div class="exportbar">
+        <div class="seg delivery" id="exportdelivery">
+          <button data-delivery="zip" class="on" data-i18n="export.zip">One .zip</button>
+          <button data-delivery="files" data-i18n="export.files">Separate files</button>
+        </div>
+        <button class="btn primary" id="export" data-i18n="right.export">Export…</button>
+        <button class="btn hidden" id="exportdir" data-i18n="export.saveFolder">Save to folder…</button>
+        <span id="exportmsg" class="hint"></span>
+      </div>
+      <div class="report">
+        <div class="report-head">
+          <span data-i18n="report.title">Report</span>
+          <a id="clearmarks" class="sub hidden"></a>
+          <a id="regen" class="sub" data-i18n="report.regenerate">regenerate</a>
+          <button class="btn copy" id="copyreport" data-i18n="report.copy">Copy report</button>
+        </div>
+        <div class="reasons">
+          <span class="sub" data-i18n="reason.label">Reason</span>
+          <span id="reasonchips"></span>
+          <input type="text" id="reasonother" data-i18n-ph="reason.otherPh" placeholder="Other reason (in English)">
+        </div>
+        <textarea id="report" spellcheck="false" rows="5"></textarea>
+      </div>
+      <div class="faceitbar">
+        <button class="btn faceit" id="faceit" data-i18n="faceit.open">Open a FACEIT support ticket</button>
+        <span class="hint" data-i18n="faceit.hint">Paste the report there and attach the exported files.</span>
+      </div>
+    </section>
+  </main>
+
+  <section id="cutview" class="cutview hidden">
+    <section class="panel" id="cutpanel">
+      <div class="panel-head">
+        <h2 data-i18n="cut.title">Listen & Cut</h2>
+        <div class="seg" id="cut-team"></div>
+        <span class="hint" data-i18n="cut.hintTeam">teams are never mixed (except in all-talk)</span>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <div class="col-head"><span data-i18n="common.rounds">Rounds</span> <span class="links"><a data-act="all" data-i18n="common.all">all</a> · <a data-act="none" data-i18n="common.none">none</a> · <a data-act="talk" data-i18n="common.withTalk">with talk</a></span></div>
+          <div class="list periods"></div>
+        </div>
+        <div class="col">
+          <div class="col-head"><span data-i18n="common.players">Players</span> <span class="links"><a data-act="all" data-i18n="common.all">all</a> · <a data-act="none" data-i18n="common.none">none</a></span></div>
+          <div class="list players"></div>
+        </div>
+      </div>
+      <div class="opts">
+        <div class="seg mode"><button data-mode="compact" class="on" data-i18n="common.talkOnly">Talk only</button><button data-mode="full" data-i18n="common.fullRound">Full round</button></div>
+        <label class="chk"><input type="checkbox" class="normalize"> <span data-i18n="left.normalize">Even out volume (listening only)</span></label>
+      </div>
+      <div class="player"></div>
+      <div class="cutranges">
+        <div class="cutranges-head">
+          <span data-i18n="cut.rangesTitle">Cut ranges</span>
+          <a id="cut-whole" class="sub" data-i18n="cut.selectWhole">select whole preview</a>
+          <a id="cut-clear" class="sub hidden"></a>
+        </div>
+        <div id="cut-rangelist" class="cutranges-list"></div>
+      </div>
+      <div class="opts">
+        <div class="seg format"><button data-format="mp3" class="on">MP3</button><button data-format="wav">WAV</button></div>
+        <div class="seg bundle"><button data-bundle="zip" class="on" data-i18n="cut.bundleZip">One .zip</button><button data-bundle="files" data-i18n="cut.bundleFiles">Separate files</button></div>
+        <label class="chk matchid hidden" data-i18n-title="right.matchIdTip"><input type="checkbox" class="incid"> <span data-i18n="right.matchId">Match ID in file names</span></label>
+      </div>
+      <div class="exportbar">
+        <button class="btn primary" id="cut-export" data-i18n="cut.export">Export clips…</button>
+        <span id="cut-exportmsg" class="hint"></span>
+      </div>
+    </section>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
