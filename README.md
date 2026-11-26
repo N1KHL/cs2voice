@@ -7,9 +7,16 @@ report for **FACEIT** (toxic voice, mic spam, threats...).
 Everything runs **100% locally in your browser** via Go WebAssembly — your demo
 never leaves your computer and nothing is uploaded. Live at **[toxic.report](https://toxic.report)**.
 
+Opened demos are kept **in your browser only** for 7 days (the extracted voice,
+not the demo file), with your marks and selections, so a reload or reopening a
+recent demo is instant. You can delete them from the start screen at any time.
+
 ## What it does
 
 - **Opens** `.dem` and FACEIT `.dem.zst` files (drag and drop, or click **Open demo**).
+- **Keeps your work:** marks, reasons, cuts and report edits are saved as you go;
+  reloading the page reopens the demo, and recent demos reopen from the start
+  screen without the file.
 - **Report tab:**
   - **Listen (left side):** pick rounds and players and hear only what was said.
     - *Talk only* cuts the silences; *Full round* keeps the round's real timing.

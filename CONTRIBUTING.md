@@ -26,13 +26,14 @@ and export audio evidence with an English report for FACEIT support.
 
 - `cmd/web/`: WebAssembly worker entrypoint (`GOOS=js GOARCH=wasm`). Thin RPC
   glue over `internal/*` (`main.go`, `helpers.go`, `preview.go`, `export.go`,
-  `cut.go`).
+  `cut.go`, `session.go`).
 - `cmd/demoinfo/`: Native CLI helper for inspecting demos (rounds, players,
   voice; optional JSON and per-player `.ogg`). It cannot render MP3/WAV: the
   codecs only exist in the browser.
 - `internal/demo/`: Demo parsing, period/round timeline, voice packet/utterance
-  extraction, and all-talk spans (`match.go`, `parse.go`, `rounds.go`,
-  `voice.go`, `alltalk.go`, `open.go`).
+  extraction, all-talk spans, and the parsed-match cache format (`match.go`,
+  `parse.go`, `rounds.go`, `voice.go`, `alltalk.go`, `open.go`, `cache.go`).
+  Bump `CacheVersion` in `cache.go` whenever the parser's output changes.
 - `internal/rules/`: Embedded `rules.json` per CS2 game version and platform.
 - `internal/audio/`: Pure-Go timeline planning, clipping (`Selection.Clip`),
   mixing, waveform peak generation, in-memory WAV/MP3/ZIP rendering, and Ogg
@@ -54,7 +55,8 @@ dependency graph (DAG) — lower layers never import upper layers:
 - **Layer 2 (shared player & waveform):** `player.js`
 - **Layer 3 (independent panels/tabs):** `listen_panel.js`, `export_panel.js`, `cut.js`
 - **Layer 4 (orchestration):** `app.js`
-- **Worker & WASM bridges:** `worker.js`, `opus_bridge.js`, `mp3_bridge.js`, `vendor/`
+- **Worker & WASM bridges:** `worker.js`, `opus_bridge.js`, `mp3_bridge.js`,
+  `opfs_store.js` (saved-demo cache in the browser's private storage), `vendor/`
 
 ## Development setup
 
