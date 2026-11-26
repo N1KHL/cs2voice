@@ -61,7 +61,7 @@
   "recent.clear": "Apagar demos salvas",
   "recent.clearConfirm": "Apagar deste navegador todas as demos salvas, com marcações e cortes?",
   "recent.remove": "Remover deste navegador",
-  "recent.marks": "{n} marcações",
+  "recent.marks": "marcações: {n}",
   "recent.opened": "aberta em {when}",
   "recent.note": "Fica salva só neste navegador, com a voz, e é apagada após 7 dias sem abrir.",
 

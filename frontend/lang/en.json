@@ -61,7 +61,7 @@
   "recent.clear": "Delete saved demos",
   "recent.clearConfirm": "Delete every saved demo, with its marks and cuts, from this browser?",
   "recent.remove": "Remove from this browser",
-  "recent.marks": "{n} marked",
+  "recent.marks": "marks: {n}",
   "recent.opened": "opened {when}",
   "recent.note": "Saved only in this browser, voice included, and deleted after 7 days without opening.",
 
