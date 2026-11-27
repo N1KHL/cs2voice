@@ -2,6 +2,7 @@
 import { t } from './i18n.js';
 import { PALETTE } from './state.js';
 import { $, el, clock, cssVar } from './ui.js';
+import { drawLanes } from './player.js';
 
 const SAMPLE_PLAYERS = [
   { id: 'p1', name: 'Player 1', color: PALETTE[0], talk: 18 },
@@ -107,72 +108,33 @@ function drawPreviewWave() {
     ctx.fillRect(x1, 0, spanW, 2);
   }
 
-  // DAW-style multi-lane symmetric bars: one horizontal track per active player,
-  // matching player.js so overlapping speakers stay distinct.
-  const lineCol = cssVar('--line');
+  // DAW-style multi-lane symmetric bars shared with player.js.
   const blocks = WAVE_BLOCKS[P.roundId] || WAVE_BLOCKS.r7;
-  const active = SAMPLE_PLAYERS
+  const lanes = SAMPLE_PLAYERS
     .map((pl, idx) => ({ pl, idx }))
-    .filter(({ pl }) => P.inAudio.has(pl.id));
-
-  if (active.length > 0) {
-    const laneH = height / active.length;
-    const step = 3;
-    const barW = 2;
-    const bars = Math.floor(width / step);
-    const maxHalf = Math.max(3, laneH * 0.44 - 1);
-    const textCol = cssVar('--text');
-    const sunkCol = cssVar('--sunk');
-    const fontSize = Math.max(9, Math.min(12, Math.floor(laneH * 0.52)));
-    const maxLabelW = Math.min(120, width * 0.35);
-
-    ctx.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-    ctx.lineJoin = 'round';
-
-    active.forEach(({ pl, idx }, laneIdx) => {
+    .filter(({ pl }) => P.inAudio.has(pl.id))
+    .map(({ pl, idx }) => {
       const pBlocks = blocks.filter(b => b.p === idx);
-      const y0 = laneIdx * laneH;
-      const mid = y0 + laneH / 2;
-
-      if (laneIdx > 0) {
-        ctx.globalAlpha = 0.55;
-        ctx.fillStyle = lineCol;
-        ctx.fillRect(0, Math.round(y0), width, 1);
-      }
-      ctx.globalAlpha = 0.25;
-      ctx.fillStyle = lineCol;
-      ctx.fillRect(0, Math.round(mid), width, 1);
-
-      ctx.globalAlpha = 0.95;
-      ctx.fillStyle = pl.color;
-      for (let i = 0; i < bars; i++) {
-        const frac = (i + 0.5) / bars;
-        let val = 0;
-        for (const blk of pBlocks) {
-          if (frac < blk.s || frac > blk.e) continue;
-          const rel = (frac - blk.s) / Math.max(0.01, blk.e - blk.s);
-          const edge = Math.pow(Math.sin(rel * Math.PI), 0.55);
-          const jitter = 0.65 + 0.35 * Math.abs(Math.sin(i * 1.8 + idx * 2.9));
-          const sample = Math.min(1, blk.amp * edge * jitter);
-          if (sample > val) val = sample;
-        }
-        if (val <= 0.03) continue;
-        const amp = Math.max(1.5, Math.pow(val, 0.85) * maxHalf);
-        ctx.fillRect(i * step, mid - amp, barW, amp * 2);
-      }
-
-      // Subtle player-name label with a background-colored halo, matching player.js.
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = sunkCol;
-      ctx.globalAlpha = 0.85;
-      ctx.strokeText(pl.name, 6, mid, maxLabelW);
-      ctx.fillStyle = textCol;
-      ctx.globalAlpha = 0.45;
-      ctx.fillText(pl.name, 6, mid, maxLabelW);
+      return {
+        color: pl.color,
+        label: pl.name,
+        level(col, step, w) {
+          const frac = (col * step + step * 0.5) / w;
+          let val = 0;
+          for (const blk of pBlocks) {
+            if (frac < blk.s || frac > blk.e) continue;
+            const rel = (frac - blk.s) / Math.max(0.01, blk.e - blk.s);
+            const edge = Math.pow(Math.sin(rel * Math.PI), 0.55);
+            const jitter = 0.65 + 0.35 * Math.abs(Math.sin(col * 1.8 + idx * 2.9));
+            const sample = Math.min(1, blk.amp * edge * jitter);
+            if (sample > val) val = sample;
+          }
+          return val > 0.03 ? val : 0;
+        },
+      };
     });
-  }
+
+  drawLanes(ctx, width, height, lanes);
 
   // Playhead indicator.
   ctx.globalAlpha = 1;

@@ -101,9 +101,10 @@ test('waveHeight: scales monotonically with speaker lanes and caps for all-talk'
   assert.equal(waveHeight(3), 96);
   assert.equal(waveHeight(4), 108);
   assert.equal(waveHeight(5), 120);
-  assert.ok(waveHeight(6) >= waveHeight(5));
-  assert.ok(waveHeight(8) >= waveHeight(6));
-  assert.equal(waveHeight(10), 160);
+  assert.equal(waveHeight(6), 132);
+  assert.ok(waveHeight(6) > waveHeight(5));
+  assert.equal(waveHeight(8), 156);
+  assert.equal(waveHeight(9), 160);
   assert.equal(waveHeight(20), 160);
 });
 

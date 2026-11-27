@@ -30,10 +30,76 @@ export function demoToFile(segments, startDemo, endDemo) {
 export function waveHeight(lanes) {
   if (lanes <= 1) return 76;
   if (lanes === 2) return 84;
-  if (lanes === 3) return 96;
-  if (lanes === 4) return 108;
-  if (lanes === 5) return 120;
-  return Math.min(160, Math.max(120, lanes * 18));
+  return Math.min(160, 60 + lanes * 12);
+}
+
+const LANE_ALPHA = {
+  none: { bar: 0.95, halo: 0.85, text: 0.45 },
+  on:   { bar: 0.95, halo: 0.95, text: 0.85 },
+  off:  { bar: 0.22, halo: 0.35, text: 0.18 },
+};
+
+/**
+ * Draw DAW-style multi-lane symmetric bars onto `g` (one horizontal track per
+ * entry in `lanes`). Each lane provides `{ color, label, level(col, step, width) }`
+ * returning a normalized amplitude in `[0, 1]`.
+ */
+export function drawLanes(g, w, h, lanes, hoveredLane = -1) {
+  const laneCount = lanes.length;
+  if (laneCount === 0) return;
+
+  const lineCol = cssVar('--line');
+  const textCol = cssVar('--text');
+  const sunkCol = cssVar('--sunk');
+  const laneH = h / laneCount;
+  const step = 3;
+  const barW = 2;
+  const bars = Math.ceil(w / step);
+  const maxHalf = Math.max(3, laneH * 0.44 - 1);
+  const fontSize = Math.max(9, Math.min(12, Math.floor(laneH * 0.52)));
+  const maxLabelW = Math.min(140, w * 0.35);
+  const fontFamily = (g.canvas && getComputedStyle(g.canvas).fontFamily) || 'sans-serif';
+
+  g.font = `600 ${fontSize}px ${fontFamily}`;
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  g.lineJoin = 'round';
+
+  for (let p = 0; p < laneCount; p++) {
+    const lane = lanes[p];
+    const y0 = p * laneH;
+    const mid = y0 + laneH / 2;
+    const focus = hoveredLane === -1 ? 'none' : (hoveredLane === p ? 'on' : 'off');
+    const alpha = LANE_ALPHA[focus];
+
+    if (p > 0) {
+      g.globalAlpha = 0.55;
+      g.fillStyle = lineCol;
+      g.fillRect(0, Math.round(y0), w, 1);
+    }
+    g.globalAlpha = 0.25;
+    g.fillStyle = lineCol;
+    g.fillRect(0, Math.round(mid), w, 1);
+
+    g.globalAlpha = alpha.bar;
+    g.fillStyle = lane.color;
+    for (let i = 0; i < bars; i++) {
+      const val = lane.level(i, step, w);
+      if (val <= 0) continue;
+      const amp = Math.max(1.5, Math.pow(val, 0.85) * maxHalf);
+      g.fillRect(i * step, mid - amp, barW, amp * 2);
+    }
+
+    // Subtle player-name label with a background-colored halo so it stays
+    // readable over speech at the start of a lane without a heavy box.
+    g.lineWidth = 3;
+    g.strokeStyle = sunkCol;
+    g.globalAlpha = alpha.halo;
+    g.strokeText(lane.label, 6, mid, maxLabelW);
+    g.fillStyle = textCol;
+    g.globalAlpha = alpha.text;
+    g.fillText(lane.label, 6, mid, maxLabelW);
+  }
 }
 
 function decodeBase64Bytes(b64) {
@@ -101,7 +167,7 @@ export function makePlayer(root, opts = {}) {
 
   const audioEl = new Audio();
   let pv = null;
-  let peaks = [];
+  let visibleLanes = [];
   let hoveredLane = -1;
 
   play.onclick = () => { audioEl.paused ? audioEl.play() : audioEl.pause(); };
@@ -307,64 +373,7 @@ export function makePlayer(root, opts = {}) {
 
     // DAW-style multi-lane symmetric bars: one horizontal track per speaker so
     // 3-5+ simultaneous voices never overlap into a muddy pile.
-    const laneCount = peaks.length;
-    if (laneCount > 0) {
-      const laneH = h / laneCount;
-      const step = 3;
-      const barW = 2;
-      const bars = Math.floor(w / step);
-      const maxHalf = Math.max(3, laneH * 0.44 - 1);
-      const textCol = cssVar('--text');
-      const sunkCol = cssVar('--sunk');
-      const fontSize = Math.max(9, Math.min(12, Math.floor(laneH * 0.52)));
-      const maxLabelW = Math.min(140, w * 0.35);
-
-      g.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
-      g.textBaseline = 'middle';
-      g.textAlign = 'left';
-      g.lineJoin = 'round';
-
-      for (let p = 0; p < laneCount; p++) {
-        const pk = peaks[p];
-        const n = pk.length;
-        const y0 = p * laneH;
-        const mid = y0 + laneH / 2;
-        const pid = pv.wavePlayers[p];
-        const label = (playerById[pid] || {}).name || String(pid);
-
-        if (p > 0) {
-          g.globalAlpha = 0.55;
-          g.fillStyle = lineCol;
-          g.fillRect(0, Math.round(y0), w, 1);
-        }
-        g.globalAlpha = 0.25;
-        g.fillStyle = lineCol;
-        g.fillRect(0, Math.round(mid), w, 1);
-
-        g.globalAlpha = hoveredLane === -1 || hoveredLane === p ? 0.95 : 0.22;
-        g.fillStyle = colors[pid] || '#888';
-
-        for (let i = 0; i < bars; i++) {
-          const b0 = Math.floor((i * step) / w * n);
-          const b1 = Math.max(b0 + 1, Math.floor(((i + 1) * step) / w * n));
-          let m = 0;
-          for (let b = b0; b < b1 && b < n; b++) if (pk[b] > m) m = pk[b];
-          if (m <= 12) continue;
-          const amp = Math.max(1.5, Math.pow(m / 255, 0.85) * maxHalf);
-          g.fillRect(i * step, mid - amp, barW, amp * 2);
-        }
-
-        // Subtle player-name label with a background-colored halo so it stays
-        // readable over speech at the start of a lane without a heavy box.
-        g.lineWidth = 3;
-        g.strokeStyle = sunkCol;
-        g.globalAlpha = hoveredLane === -1 ? 0.85 : (hoveredLane === p ? 0.95 : 0.35);
-        g.strokeText(label, 6, mid, maxLabelW);
-        g.fillStyle = textCol;
-        g.globalAlpha = hoveredLane === -1 ? 0.45 : (hoveredLane === p ? 0.85 : 0.18);
-        g.fillText(label, 6, mid, maxLabelW);
-      }
-    }
+    drawLanes(g, w, h, visibleLanes, hoveredLane);
 
     g.globalAlpha = 1;
     const cx = audioEl.currentTime / pv.duration * w;
@@ -420,7 +429,7 @@ export function makePlayer(root, opts = {}) {
       pending = null;
       hoveredLane = -1;
       if (!v || !v.duration) {
-        peaks = [];
+        visibleLanes = [];
         canvas.style.height = waveHeight(1) + 'px';
         play.disabled = true;
         time.textContent = '0:00 / 0:00';
@@ -431,15 +440,40 @@ export function makePlayer(root, opts = {}) {
         renderMarks();
         return;
       }
-      peaks = (v.peaks || []).map(decodeBase64Bytes);
-      canvas.style.height = waveHeight(peaks.length) + 'px';
-      (v.wavePlayers || []).forEach((id, idx) => {
+      const allPeaks = (v.peaks || []).map(decodeBase64Bytes);
+      const rawLanes = (v.wavePlayers || []).map((id, i) => ({
+        id,
+        pk: allPeaks[i] || new Uint8Array(0),
+      }));
+      // Keep silent tracks visible for a normal 5-player team so users can confirm
+      // someone stayed quiet, but drop silent lanes in all-talk (>5 selected) so
+      // empty rows don't squeeze the speakers who actually talked.
+      const kept = rawLanes.length > 5
+        ? rawLanes.filter(l => l.pk.some(val => val > 12))
+        : rawLanes;
+      visibleLanes = kept.map(({ id, pk }) => {
+        const n = pk.length;
+        return {
+          id,
+          color: colors[id] || '#888',
+          label: (playerById[id] || {}).name || String(id),
+          level(col, step, w) {
+            const b0 = Math.floor((col * step) / w * n);
+            const b1 = Math.max(b0 + 1, Math.floor(((col + 1) * step) / w * n));
+            let m = 0;
+            for (let b = b0; b < b1 && b < n; b++) if (pk[b] > m) m = pk[b];
+            return m > 12 ? m / 255 : 0;
+          },
+        };
+      });
+      canvas.style.height = waveHeight(visibleLanes.length) + 'px';
+      visibleLanes.forEach((laneObj, idx) => {
         const s = el('span');
         const d = el('span', 'dot');
-        d.style.background = colors[id];
-        s.append(d, (playerById[id] || {}).name || id);
-        s.onmouseenter = () => { hoveredLane = idx; draw(); };
-        s.onmouseleave = () => { hoveredLane = -1; draw(); };
+        d.style.background = laneObj.color;
+        s.append(d, laneObj.label);
+        s.onpointerenter = () => { hoveredLane = idx; draw(); };
+        s.onpointerleave = () => { hoveredLane = -1; draw(); };
         legend.append(s);
       });
       audioEl.src = v.url;
