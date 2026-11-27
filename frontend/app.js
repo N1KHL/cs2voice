@@ -7,10 +7,12 @@ import { $, $$, el, debounce, store, tabStore, showError } from './ui.js';
 import { initListenPanel, setupListen, renderLeft, redrawListen } from './listen_panel.js';
 import { initExportPanel, setupExport, renderExportOnLang, redrawExport, toggleReportMark } from './export_panel.js';
 import { initCut, setupCut, renderCut, redrawCut, onShowCut, toggleCutRange } from './cut.js';
+import { initLanding, renderLanding, redrawLanding } from './landing.js';
 
 initListenPanel();
 initExportPanel();
 initCut();
+initLanding();
 
 setProgressHandler(pct => {
   const bar = $('#loadingbar');
@@ -187,6 +189,7 @@ async function openRecent(key, name) {
 function showEmpty() {
   $('#empty').classList.remove('hidden');
   renderRecent();
+  redrawLanding();
 }
 
 async function renderRecent() {
@@ -282,6 +285,7 @@ $('#theme').onclick = () => {
   redrawListen();
   redrawExport();
   redrawCut();
+  redrawLanding();
 };
 
 $('#about').onclick = async () => {
@@ -346,6 +350,7 @@ window.addEventListener('keydown', e => {
 // ---------- startup ----------
 
 initLang(() => {
+  renderLanding();
   if (!M) { renderRecent(); return; }
   renderInfo();
   renderLeft();

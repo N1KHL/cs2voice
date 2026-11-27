@@ -53,15 +53,16 @@ header { display: flex; align-items: center; gap: 8px 14px; flex-wrap: nowrap; p
 
 .warnings { background: var(--warn-bg); color: var(--warn); padding: 6px 16px; border-bottom: 1px solid var(--warn-line); }
 
-.empty { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 16px; overflow: auto; }
+.empty { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px 24px; overflow: auto; }
 .empty::before, .empty::after { content: ''; flex: 1 0 0; }
-.drop { border: 2px dashed var(--line); border-radius: 14px; padding: 60px 90px; text-align: center; }
+.drop { border: 2px dashed var(--line); border-radius: 14px; padding: 48px 40px; text-align: center; background: var(--panel); transition: border-color .15s, background .15s; }
 .drop-title { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
 .drop-sub { color: var(--dim); }
+.drop-actions { margin-top: 16px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .drop-privacy { margin-top: 14px; font-size: 12px; color: var(--dim); }
 #loadingbar { width: 260px; max-width: 70vw; height: 8px; margin: 14px auto 6px; display: block; accent-color: var(--accent); }
-body.file-drop-target-active .drop { border-color: var(--accent); }
-.recent { width: min(560px, 100%); }
+body.file-drop-target-active .drop { border-color: var(--accent); background: var(--sel); }
+.recent { width: min(1120px, 100%); }
 .recent-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .recent-head h3 { margin: 0; font-size: 14px; }
 #recentlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -74,6 +75,37 @@ body.file-drop-target-active .drop { border-color: var(--accent); }
 .recent-note { margin-top: 8px; font-size: 12px; color: var(--dim); }
 .spinner { width: 34px; height: 34px; margin: 0 auto 14px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- split landing with interactive preview ---------- */
+.landing { width: min(1120px, 100%); display: grid; grid-template-columns: minmax(290px, 0.86fr) minmax(0, 1.14fr); gap: 22px; align-items: center; }
+.landing-dropcol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.landing-steps { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px; font-size: 12px; color: var(--dim); padding: 0 6px; }
+.landing-step-sep { opacity: .5; }
+.landing-previewcol { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.preview-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.preview-titlewrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.preview-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; padding: 2px 8px; border-radius: 10px; background: var(--sel); color: var(--accent2); border: 1px solid var(--line); }
+.preview-meta { font-size: 12px; color: var(--dim); }
+.preview-cols { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 8px; }
+.preview-list { display: flex; flex-direction: column; }
+.preview-list .row:last-child { border-bottom: 0; }
+.preview-player { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.preview-ptop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.preview-play { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; flex: none; opacity: .85; }
+.preview-wave { width: 100%; height: 74px; border-radius: 6px; display: block; background: var(--sunk); }
+.preview-caption { text-align: center; }
+.preview-output { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.preview-outhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--line); background: var(--head2); font-size: 12px; font-weight: 600; }
+.preview-pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; background: var(--panel2); color: var(--accent2); border: 1px solid var(--line); }
+.preview-pill.cut { color: var(--cut); }
+.preview-report { margin: 0; padding: 8px 10px; font: 12px/1.45 Consolas, monospace; color: var(--text); white-space: pre-wrap; }
+.preview-clips { display: flex; flex-direction: column; }
+.preview-cliprow { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--row-line); font-size: 12px; }
+.preview-cliprow:last-child { border-bottom: 0; }
+.preview-clipname { flex: 1; font-family: Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-clipdur { color: var(--dim); font-variant-numeric: tabular-nums; }
 
 main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .panel { container-type: inline-size; display: flex; flex-direction: column; min-height: 0; min-width: 0; padding: 12px 14px 24px; gap: 10px; overflow: auto; }
@@ -285,8 +317,11 @@ dialog.about p { margin: 8px 0; line-height: 1.45; }
   #left { border-right: 0; border-bottom: 1px solid var(--line); }
   .cutview { flex: none; overflow: visible; }
   #cutpanel { height: auto; }
-  .empty { padding: 16px; }
-  .drop { padding: 32px 20px; width: 100%; max-width: 480px; }
+  .empty { padding: 16px; justify-content: flex-start; }
+  .empty::before, .empty::after { display: none; }
+  .landing { grid-template-columns: minmax(0, 1fr); }
+  .preview-cols { grid-template-columns: minmax(0, 1fr); }
+  .drop { padding: 32px 20px; width: 100%; max-width: 480px; margin: 0 auto; }
   .pctl { flex-wrap: wrap; gap: 8px; }
   .pwhere { min-width: 120px; }
   .col-head, .report-head, .cutranges-head { flex-wrap: wrap; }

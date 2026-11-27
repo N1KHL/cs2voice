@@ -165,5 +165,17 @@
   "faceit.hint": "Cole o report lá e anexe os arquivos exportados.",
 
   "player.preparing": "preparando…",
-  "player.where": "{name}{allTalk} · {since} desde o início · demo {demo}"
+  "player.where": "{name}{allTalk} · {since} desde o início · demo {demo}",
+
+  "landing.step1": "1. Solte .dem / .dem.zst",
+  "landing.step2": "2. Ouça por round e time",
+  "landing.step3": "3. Exporte áudios + report",
+  "landing.badge": "Prévia de exemplo",
+  "landing.matchMeta": "de_mirage · 13–11 · Voz do time isolada",
+  "landing.dragHint": "Experimente clicar num jogador, trocar de round ou arrastar a marca abaixo",
+  "landing.markHint": "Arraste a marca vermelha para ver o horário do report atualizar na hora",
+  "landing.cutHint": "Arraste os trechos em ciano — exporte clipes em MP3/WAV",
+  "landing.outputReport": "Report da FACEIT (sempre em inglês)",
+  "landing.outputClips": "Clipes prontos para exportar",
+  "landing.clipsZip": "{n} clipes · .zip"
 }
