@@ -1,0 +1,31 @@
+# Runs the full check suite (scripts/test.sh) on PRs and on pushes to main.
+# No Claude involved, so it costs no Claude usage.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Run checks
+        run: bash scripts/test.sh
