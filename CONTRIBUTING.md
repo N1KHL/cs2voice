@@ -53,7 +53,7 @@ dependency graph (DAG) — lower layers never import upper layers:
 - **Layer 0 (leaves):** `i18n.js`, `state.js`, `api.js`
 - **Layer 1 (shared UI & download helpers):** `ui.js`
 - **Layer 2 (shared player & waveform):** `player.js`
-- **Layer 3 (independent panels/tabs):** `listen_panel.js`, `export_panel.js`, `cut.js`
+- **Layer 3 (independent panels/tabs):** `listen_panel.js`, `export_panel.js`, `cut.js`, `landing.js`
 - **Layer 4 (orchestration):** `app.js`
 - **Worker & WASM bridges:** `worker.js`, `opus_bridge.js`, `mp3_bridge.js`,
   `opfs_store.js` (saved-demo cache in the browser's private storage), `vendor/`
@@ -130,8 +130,10 @@ top to bottom:
 
 ## Translations (`frontend/lang/`)
 
-- `frontend/lang/en.json` and `frontend/lang/pt-BR.json` must have identical
-  keys and matching `{var}` placeholders (enforced by `tests/i18n.test.mjs`).
+- English is the default: new UI text goes into `frontend/lang/en.json`.
+  Other languages may lag behind, since missing keys fall back to English, but
+  they must not keep keys removed from `en.json`, and their `{var}`
+  placeholders must match (enforced by `tests/i18n.test.mjs`).
 - To add a language, create `frontend/lang/<code>.json` with `"_name"` and add
   its code to `frontend/lang/index.json`.
 
@@ -147,5 +149,5 @@ top to bottom:
 4. Ensure the test script (`scripts/test.ps1` or `scripts/test.sh`) and the
    web build (`scripts/build-web.ps1` or `scripts/build-web.sh`) pass before
    opening your pull request.
-5. If AI tools helped, say so in the pull request description (which tool and
-   what it did).
+5. If AI tools helped, say so in the pull request description (e.g.,
+   `AI-assisted`).

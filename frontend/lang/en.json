@@ -165,5 +165,17 @@
   "faceit.hint": "Paste the report there and attach the exported files.",
 
   "player.preparing": "preparing…",
-  "player.where": "{name}{allTalk} · {since} into it · demo {demo}"
+  "player.where": "{name}{allTalk} · {since} into it · demo {demo}",
+
+  "landing.step1": "1. Drop .dem / .dem.zst",
+  "landing.step2": "2. Listen per round & team",
+  "landing.step3": "3. Export clips + report",
+  "landing.badge": "Sample preview",
+  "landing.matchMeta": "de_mirage · 13–11 · Team voice isolated",
+  "landing.dragHint": "Try clicking a player, switching rounds, or dragging the mark below",
+  "landing.markHint": "Drag the mark to see the report timestamp update live",
+  "landing.cutHint": "Drag the cut ranges — export clean MP3/WAV clips",
+  "landing.outputReport": "FACEIT report (always English)",
+  "landing.outputClips": "Ready-to-export clips",
+  "landing.clipsZip": "{n} clips · .zip"
 }

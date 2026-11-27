@@ -78,7 +78,7 @@ licenses/            Full license texts bundled into build/web/licenses.txt
 - Layer 0: `i18n.js`, `state.js`, `api.js`
 - Layer 1: `ui.js`
 - Layer 2: `player.js`
-- Layer 3: `listen_panel.js`, `export_panel.js`, `cut.js` (must not import each other)
+- Layer 3: `listen_panel.js`, `export_panel.js`, `cut.js`, `landing.js` (must not import each other)
 - Layer 4: `app.js`
 - Worker: `worker.js` + `opus_bridge.js` + `mp3_bridge.js` + `opfs_store.js`
 
@@ -112,14 +112,15 @@ Never name a local variable `t` in `frontend/*.js` (it shadows `t(key, vars)`).
     duplicated helpers, or dead code.
   - In CSS (`frontend/style.css`), always use theme variables (`:root` /
     `:root[data-theme="light"]`), never hardcoded hex values in component rules.
-- **Translations:** Any UI text change must update both `frontend/lang/en.json`
-  and `frontend/lang/pt-BR.json` identically (verified by `tests/i18n.test.mjs`).
+- **Translations:** English is the default. Any UI text change goes into
+  `frontend/lang/en.json`; `frontend/lang/pt-BR.json` may lag behind (missing
+  keys fall back to English) but must not keep keys removed from `en.json`,
+  and its `{var}` placeholders must match (verified by `tests/i18n.test.mjs`).
 - **Testing:** Keep Go unit tests beside the code (`*_test.go`) and JS/bridge
   tests in `tests/*.test.mjs` so `frontend/` contains production assets only.
 - **Git & security:**
   - Never commit demo files (`*.dem`, `*.dem.zst`), `build/web/`, binaries,
     secrets, or personal paths/usernames/emails.
   - Pull requests made with AI help **must** say so in the description, e.g. a
-    line `AI-assisted: <tool/model>, <what it did>`, so reviewers know what to
-    check closely.
+    line `AI-assisted`, so reviewers know what to check closely.
   - Update `THIRD_PARTY_NOTICES.md` and `licenses/` whenever dependencies change.

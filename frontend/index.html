@@ -60,10 +60,28 @@
   <div id="warnings" class="warnings hidden"></div>
 
   <section id="empty" class="empty">
-    <div class="drop">
-      <div class="drop-title" data-i18n="app.dropTitle">Drop a CS2 demo here</div>
-      <div class="drop-sub" data-i18n="app.dropSub">.dem or .dem.zst (FACEIT) — or click Open demo</div>
-      <div class="drop-privacy" data-i18n="app.privacy">Your demo never leaves your computer — everything runs in your browser.</div>
+    <div class="landing">
+      <div class="landing-dropcol">
+        <div class="drop" id="dropzone">
+          <div class="drop-title" data-i18n="app.dropTitle">Drop a CS2 demo here</div>
+          <div class="drop-sub" data-i18n="app.dropSub">.dem or .dem.zst (FACEIT) — or click Open demo</div>
+          <div class="drop-actions">
+            <button type="button" class="btn primary" id="drop-open" data-i18n="app.open">Open demo</button>
+          </div>
+          <div class="drop-privacy" data-i18n="app.privacy">Your demo never leaves your computer — everything runs in your browser.</div>
+        </div>
+        <div class="landing-steps">
+          <span data-i18n="landing.step1">1. Drop .dem / .dem.zst</span>
+          <span class="landing-step-sep">·</span>
+          <span data-i18n="landing.step2">2. Listen per round & team</span>
+          <span class="landing-step-sep">·</span>
+          <span data-i18n="landing.step3">3. Export clips + report</span>
+        </div>
+      </div>
+
+      <div class="landing-previewcol">
+        <div class="preview-card" id="landing-preview"></div>
+      </div>
     </div>
     <div id="recent" class="recent hidden">
       <div class="recent-head">

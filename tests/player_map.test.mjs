@@ -92,6 +92,22 @@ test('demoToFile: non-overlapping, clamped, and multi-segment ranges', { skip: s
   assert.ok(Math.abs(pieces[0].e - 7.5) < 1e-9);
 });
 
+test('waveHeight: scales monotonically with speaker lanes and caps for all-talk', { skip: skipReason }, () => {
+  const { waveHeight } = playerMod;
+
+  assert.equal(waveHeight(0), 76);
+  assert.equal(waveHeight(1), 76);
+  assert.equal(waveHeight(2), 84);
+  assert.equal(waveHeight(3), 96);
+  assert.equal(waveHeight(4), 108);
+  assert.equal(waveHeight(5), 120);
+  assert.equal(waveHeight(6), 132);
+  assert.ok(waveHeight(6) > waveHeight(5));
+  assert.equal(waveHeight(8), 156);
+  assert.equal(waveHeight(9), 160);
+  assert.equal(waveHeight(20), 160);
+});
+
 test('state.js: teamPlayers, talkIn, groupPlayers, setMatch, and reasonText', { skip: skipReason }, () => {
   const {
     setMatch,
