@@ -78,7 +78,7 @@ licenses/            Full license texts bundled into build/web/licenses.txt
 - Layer 0: `i18n.js`, `state.js`, `api.js`
 - Layer 1: `ui.js`
 - Layer 2: `player.js`
-- Layer 3: `listen_panel.js`, `export_panel.js`, `cut.js` (must not import each other)
+- Layer 3: `listen_panel.js`, `export_panel.js`, `cut.js`, `landing.js` (must not import each other)
 - Layer 4: `app.js`
 - Worker: `worker.js` + `opus_bridge.js` + `mp3_bridge.js` + `opfs_store.js`
 
