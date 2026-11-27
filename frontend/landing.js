@@ -2,6 +2,7 @@
 import { t } from './i18n.js';
 import { PALETTE } from './state.js';
 import { $, el, clock, cssVar } from './ui.js';
+import { drawLanes } from './player.js';
 
 const SAMPLE_PLAYERS = [
   { id: 'p1', name: 'Player 1', color: PALETTE[0], talk: 18 },
@@ -16,7 +17,7 @@ const SAMPLE_ROUNDS = [
 ];
 
 // Deterministic voice blocks per round (including overlapping speech) so the
-// preview renders the same overlaid per-player envelopes as player.js.
+// preview renders the same DAW-style per-player lanes as player.js.
 const WAVE_BLOCKS = {
   r7: [
     { p: 0, s: 0.03, e: 0.18, amp: 0.56 },
@@ -80,7 +81,7 @@ function drawPreviewWave() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const rect = canvasEl.getBoundingClientRect();
   const width = Math.max(240, Math.round(rect.width || 440));
-  const height = Math.max(64, Math.round(rect.height || 74));
+  const height = Math.max(64, Math.round(rect.height || 84));
   const targetW = Math.round(width * dpr);
   const targetH = Math.round(height * dpr);
   if (canvasEl.width !== targetW || canvasEl.height !== targetH) {
@@ -92,9 +93,6 @@ function drawPreviewWave() {
 
   ctx.fillStyle = cssVar('--sunk');
   ctx.fillRect(0, 0, width, height);
-
-  const base = height - 4;
-  const top = 6;
 
   // Highlight selected mark or cut range with the same band + 2px top bar as player.js.
   const ranges = P.tab === 'report' ? [P.mark] : P.cuts;
@@ -110,75 +108,36 @@ function drawPreviewWave() {
     ctx.fillRect(x1, 0, spanW, 2);
   }
 
-  // One smooth outline per active player rising from a shared baseline, overlaid
-  // (not stacked), matching player.js so overlapping speakers remain distinct.
+  // DAW-style multi-lane symmetric bars shared with player.js.
   const blocks = WAVE_BLOCKS[P.roundId] || WAVE_BLOCKS.r7;
-  const curves = [];
-  for (let pIdx = 0; pIdx < SAMPLE_PLAYERS.length; pIdx++) {
-    const pl = SAMPLE_PLAYERS[pIdx];
-    if (!P.inAudio.has(pl.id)) continue;
-    const pBlocks = blocks.filter(b => b.p === pIdx);
-    const env = new Float32Array(width);
-    let total = 0;
-    for (let x = 0; x < width; x++) {
-      const frac = (x + 0.5) / width;
-      let val = 0;
-      for (const blk of pBlocks) {
-        if (frac < blk.s || frac > blk.e) continue;
-        const rel = (frac - blk.s) / Math.max(0.01, blk.e - blk.s);
-        // Smooth attack/release at edges with organic syllable ripples inside.
-        const edge = Math.sin(rel * Math.PI);
-        const edgeEnv = Math.pow(edge, 0.55);
-        const ripple = 0.62
-          + 0.22 * Math.sin(rel * Math.PI * 5 + pIdx * 1.7 + blk.s * 19)
-          + 0.16 * Math.sin(rel * Math.PI * 11 + pIdx * 3.1 + blk.e * 13);
-        const sample = Math.min(1, blk.amp * edgeEnv * Math.max(0.25, ripple));
-        if (sample > val) val = sample;
-      }
-      env[x] = val;
-      total += val;
-    }
-    if (total > 0) curves.push({ color: pl.color, env, total });
-  }
+  const lanes = SAMPLE_PLAYERS
+    .map((pl, idx) => ({ pl, idx }))
+    .filter(({ pl }) => P.inAudio.has(pl.id))
+    .map(({ pl, idx }) => {
+      const pBlocks = blocks.filter(b => b.p === idx);
+      return {
+        color: pl.color,
+        label: pl.name,
+        level(col, step, w) {
+          const frac = (col * step + step * 0.5) / w;
+          let val = 0;
+          for (const blk of pBlocks) {
+            if (frac < blk.s || frac > blk.e) continue;
+            const rel = (frac - blk.s) / Math.max(0.01, blk.e - blk.s);
+            const edge = Math.pow(Math.sin(rel * Math.PI), 0.55);
+            const jitter = 0.65 + 0.35 * Math.abs(Math.sin(col * 1.8 + idx * 2.9));
+            const sample = Math.min(1, blk.amp * edge * jitter);
+            if (sample > val) val = sample;
+          }
+          return val > 0.03 ? val : 0;
+        },
+      };
+    });
 
-  // Loudest-on-average first, so quieter voices are drawn on top.
-  curves.sort((a, b) => b.total - a.total);
+  drawLanes(ctx, width, height, lanes);
 
-  for (const curve of curves) {
-    const e = curve.env;
-    ctx.beginPath();
-    ctx.moveTo(0, base);
-    for (let x = 0; x < width; x++) ctx.lineTo(x + 0.5, base - e[x] * (base - top));
-    ctx.lineTo(width, base);
-    ctx.closePath();
-    ctx.globalAlpha = 0.16;
-    ctx.fillStyle = curve.color;
-    ctx.fill();
-
-    // Outline only where the player talks (no colored line along the baseline).
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = curve.color;
-    ctx.lineWidth = 1.6;
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    let on = false;
-    for (let x = 0; x < width; x++) {
-      const y = base - e[x] * (base - top);
-      if (e[x] > 0.005 || (x + 1 < width && e[x + 1] > 0.005)) {
-        on ? ctx.lineTo(x + 0.5, y) : ctx.moveTo(x + 0.5, y);
-        on = true;
-      } else if (on) {
-        ctx.lineTo(x + 0.5, base);
-        on = false;
-      }
-    }
-    ctx.stroke();
-  }
-
-  // Baseline + playhead indicator.
+  // Playhead indicator.
   ctx.globalAlpha = 1;
-  ctx.fillStyle = cssVar('--line');
-  ctx.fillRect(0, base, width, 1);
   const playX = Math.round((P.tab === 'report' ? P.mark.s : P.cuts[0].s) * width);
   ctx.fillStyle = cssVar('--text');
   ctx.fillRect(playX, 0, 1.5, height);
