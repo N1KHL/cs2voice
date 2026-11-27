@@ -122,6 +122,5 @@ Never name a local variable `t` in `frontend/*.js` (it shadows `t(key, vars)`).
   - Never commit demo files (`*.dem`, `*.dem.zst`), `build/web/`, binaries,
     secrets, or personal paths/usernames/emails.
   - Pull requests made with AI help **must** say so in the description, e.g. a
-    line `AI-assisted: <tool/model>, <what it did>`, so reviewers know what to
-    check closely.
+    line `AI-assisted`, so reviewers know what to check closely.
   - Update `THIRD_PARTY_NOTICES.md` and `licenses/` whenever dependencies change.
