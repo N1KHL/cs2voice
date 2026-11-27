@@ -112,8 +112,10 @@ Never name a local variable `t` in `frontend/*.js` (it shadows `t(key, vars)`).
     duplicated helpers, or dead code.
   - In CSS (`frontend/style.css`), always use theme variables (`:root` /
     `:root[data-theme="light"]`), never hardcoded hex values in component rules.
-- **Translations:** Any UI text change must update both `frontend/lang/en.json`
-  and `frontend/lang/pt-BR.json` identically (verified by `tests/i18n.test.mjs`).
+- **Translations:** English is the default. Any UI text change goes into
+  `frontend/lang/en.json`; `frontend/lang/pt-BR.json` may lag behind (missing
+  keys fall back to English) but must not keep keys removed from `en.json`,
+  and its `{var}` placeholders must match (verified by `tests/i18n.test.mjs`).
 - **Testing:** Keep Go unit tests beside the code (`*_test.go`) and JS/bridge
   tests in `tests/*.test.mjs` so `frontend/` contains production assets only.
 - **Git & security:**

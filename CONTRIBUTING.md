@@ -130,8 +130,10 @@ top to bottom:
 
 ## Translations (`frontend/lang/`)
 
-- `frontend/lang/en.json` and `frontend/lang/pt-BR.json` must have identical
-  keys and matching `{var}` placeholders (enforced by `tests/i18n.test.mjs`).
+- English is the default: new UI text goes into `frontend/lang/en.json`.
+  Other languages may lag behind, since missing keys fall back to English, but
+  they must not keep keys removed from `en.json`, and their `{var}`
+  placeholders must match (enforced by `tests/i18n.test.mjs`).
 - To add a language, create `frontend/lang/<code>.json` with `"_name"` and add
   its code to `frontend/lang/index.json`.
 
