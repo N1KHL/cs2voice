@@ -145,5 +145,5 @@ top to bottom:
 4. Ensure the test script (`scripts/test.ps1` or `scripts/test.sh`) and the
    web build (`scripts/build-web.ps1` or `scripts/build-web.sh`) pass before
    opening your pull request.
-5. If AI tools helped, say so in the pull request description (which tool and
-   what it did).
+5. If AI tools helped, say so in the pull request description (e.g.,
+   `AI-assisted`).
