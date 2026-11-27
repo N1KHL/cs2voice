@@ -26,6 +26,16 @@ export function demoToFile(segments, startDemo, endDemo) {
   return out;
 }
 
+/** Choose a comfortable canvas height (px) for `lanes` stacked speaker tracks. */
+export function waveHeight(lanes) {
+  if (lanes <= 1) return 76;
+  if (lanes === 2) return 84;
+  if (lanes === 3) return 96;
+  if (lanes === 4) return 108;
+  if (lanes === 5) return 120;
+  return Math.min(160, Math.max(120, lanes * 18));
+}
+
 function decodeBase64Bytes(b64) {
   const s = atob(b64 || '');
   const a = new Uint8Array(s.length);
@@ -92,6 +102,7 @@ export function makePlayer(root, opts = {}) {
   const audioEl = new Audio();
   let pv = null;
   let peaks = [];
+  let hoveredLane = -1;
 
   play.onclick = () => { audioEl.paused ? audioEl.play() : audioEl.pause(); };
   audioEl.onplay = () => { play.textContent = '❚❚'; };
@@ -250,24 +261,27 @@ export function makePlayer(root, opts = {}) {
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
+    if (!w || !h) return;
+    const targetW = Math.round(w * dpr);
+    const targetH = Math.round(h * dpr);
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
     const g = canvas.getContext('2d');
-    g.scale(dpr, dpr);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
     if (!pv || !pv.duration) return;
 
+    const lineCol = cssVar('--line');
+
     // cuts / period changes
-    g.fillStyle = cssVar('--line');
+    g.fillStyle = lineCol;
     for (const s of segs()) {
       const x = s.out / pv.duration * w;
       g.fillRect(x, 0, 1, h);
     }
 
-    // One smooth outline per player rising from a shared baseline, overlaid
-    // (not stacked): with 3+ people talking each voice is still its own curve.
-    const base = h - 4;
-    const top = 4;
     if (laneCfg) {
       const mcol = cssVar(laneCfg.colorVar);
       const band = (s0, e0, alpha) => {
@@ -291,75 +305,68 @@ export function makePlayer(root, opts = {}) {
       g.globalAlpha = 1;
     }
 
-    const n = peaks.length ? peaks[0].length : 0;
-    const env = peaks.map(pk => {
-      const raw = new Float32Array(w);
-      for (let x = 0; x < w; x++) {
-        const b0 = Math.floor(x / w * n);
-        const b1 = Math.max(b0 + 1, Math.floor((x + 1) / w * n));
-        let m = 0;
-        for (let b = b0; b < b1 && b < n; b++) if (pk[b] > m) m = pk[b];
-        raw[x] = m > 12 ? m / 255 : 0;
-      }
-      // fill tiny gaps between syllables, then smooth into an arc
-      const held = new Float32Array(w);
-      const out = new Float32Array(w);
-      const hold = Math.max(2, Math.round(w / n * 6));
-      for (let x = 0; x < w; x++) {
-        let m = 0;
-        for (let k = Math.max(0, x - hold); k <= Math.min(w - 1, x + hold); k++) if (raw[k] > m) m = raw[k];
-        held[x] = m;
-      }
-      const r = Math.max(2, Math.round(w / n * 4));
-      for (let x = 0; x < w; x++) {
-        let s = 0;
-        let c = 0;
-        for (let k = Math.max(0, x - r); k <= Math.min(w - 1, x + r); k++) { s += held[k]; c++; }
-        out[x] = s / c;
-      }
-      for (let x = 0; x < w; x++) if (raw[x] === 0 && held[x] === 0) out[x] = 0;
-      return out;
-    });
+    // DAW-style multi-lane symmetric bars: one horizontal track per speaker so
+    // 3-5+ simultaneous voices never overlap into a muddy pile.
+    const laneCount = peaks.length;
+    if (laneCount > 0) {
+      const laneH = h / laneCount;
+      const step = 3;
+      const barW = 2;
+      const bars = Math.floor(w / step);
+      const maxHalf = Math.max(3, laneH * 0.44 - 1);
+      const textCol = cssVar('--text');
+      const sunkCol = cssVar('--sunk');
+      const fontSize = Math.max(9, Math.min(12, Math.floor(laneH * 0.52)));
+      const maxLabelW = Math.min(140, w * 0.35);
 
-    // loudest-on-average first, so quieter voices are drawn on top
-    const order = env
-      .map((e, p) => [e.reduce((a, v) => a + v, 0), p])
-      .sort((a, b) => b[0] - a[0])
-      .map(v => v[1]);
-
-    for (const p of order) {
-      const e = env[p];
-      const col = colors[pv.wavePlayers[p]] || '#888';
-      g.beginPath();
-      g.moveTo(0, base);
-      for (let x = 0; x < w; x++) g.lineTo(x + 0.5, base - e[x] * (base - top));
-      g.lineTo(w, base);
-      g.closePath();
-      g.globalAlpha = 0.16;
-      g.fillStyle = col;
-      g.fill();
-      // outline only where the player talks (no colored line along the baseline)
-      g.globalAlpha = 1;
-      g.strokeStyle = col;
-      g.lineWidth = 1.6;
+      g.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
+      g.textBaseline = 'middle';
+      g.textAlign = 'left';
       g.lineJoin = 'round';
-      g.beginPath();
-      let on = false;
-      for (let x = 0; x < w; x++) {
-        const y = base - e[x] * (base - top);
-        if (e[x] > 0.005 || (x + 1 < w && e[x + 1] > 0.005)) {
-          on ? g.lineTo(x + 0.5, y) : g.moveTo(x + 0.5, y);
-          on = true;
-        } else if (on) {
-          g.lineTo(x + 0.5, base);
-          on = false;
+
+      for (let p = 0; p < laneCount; p++) {
+        const pk = peaks[p];
+        const n = pk.length;
+        const y0 = p * laneH;
+        const mid = y0 + laneH / 2;
+        const pid = pv.wavePlayers[p];
+        const label = (playerById[pid] || {}).name || String(pid);
+
+        if (p > 0) {
+          g.globalAlpha = 0.55;
+          g.fillStyle = lineCol;
+          g.fillRect(0, Math.round(y0), w, 1);
         }
+        g.globalAlpha = 0.25;
+        g.fillStyle = lineCol;
+        g.fillRect(0, Math.round(mid), w, 1);
+
+        g.globalAlpha = hoveredLane === -1 || hoveredLane === p ? 0.95 : 0.22;
+        g.fillStyle = colors[pid] || '#888';
+
+        for (let i = 0; i < bars; i++) {
+          const b0 = Math.floor((i * step) / w * n);
+          const b1 = Math.max(b0 + 1, Math.floor(((i + 1) * step) / w * n));
+          let m = 0;
+          for (let b = b0; b < b1 && b < n; b++) if (pk[b] > m) m = pk[b];
+          if (m <= 12) continue;
+          const amp = Math.max(1.5, Math.pow(m / 255, 0.85) * maxHalf);
+          g.fillRect(i * step, mid - amp, barW, amp * 2);
+        }
+
+        // Subtle player-name label with a background-colored halo so it stays
+        // readable over speech at the start of a lane without a heavy box.
+        g.lineWidth = 3;
+        g.strokeStyle = sunkCol;
+        g.globalAlpha = hoveredLane === -1 ? 0.85 : (hoveredLane === p ? 0.95 : 0.35);
+        g.strokeText(label, 6, mid, maxLabelW);
+        g.fillStyle = textCol;
+        g.globalAlpha = hoveredLane === -1 ? 0.45 : (hoveredLane === p ? 0.85 : 0.18);
+        g.fillText(label, 6, mid, maxLabelW);
       }
-      g.stroke();
     }
 
-    g.fillStyle = cssVar('--line');
-    g.fillRect(0, base, w, 1);
+    g.globalAlpha = 1;
     const cx = audioEl.currentTime / pv.duration * w;
     g.fillStyle = cssVar('--text');
     g.fillRect(cx, 0, 1.5, h);
@@ -411,8 +418,10 @@ export function makePlayer(root, opts = {}) {
       status.textContent = msg || '';
       legend.innerHTML = '';
       pending = null;
+      hoveredLane = -1;
       if (!v || !v.duration) {
         peaks = [];
+        canvas.style.height = waveHeight(1) + 'px';
         play.disabled = true;
         time.textContent = '0:00 / 0:00';
         where.textContent = '';
@@ -423,13 +432,16 @@ export function makePlayer(root, opts = {}) {
         return;
       }
       peaks = (v.peaks || []).map(decodeBase64Bytes);
-      for (const id of v.wavePlayers || []) {
+      canvas.style.height = waveHeight(peaks.length) + 'px';
+      (v.wavePlayers || []).forEach((id, idx) => {
         const s = el('span');
         const d = el('span', 'dot');
         d.style.background = colors[id];
         s.append(d, (playerById[id] || {}).name || id);
+        s.onmouseenter = () => { hoveredLane = idx; draw(); };
+        s.onmouseleave = () => { hoveredLane = -1; draw(); };
         legend.append(s);
-      }
+      });
       audioEl.src = v.url;
       audioEl.currentTime = 0;
       play.disabled = false;
