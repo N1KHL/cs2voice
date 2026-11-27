@@ -53,7 +53,7 @@ dependency graph (DAG) — lower layers never import upper layers:
 - **Layer 0 (leaves):** `i18n.js`, `state.js`, `api.js`
 - **Layer 1 (shared UI & download helpers):** `ui.js`
 - **Layer 2 (shared player & waveform):** `player.js`
-- **Layer 3 (independent panels/tabs):** `listen_panel.js`, `export_panel.js`, `cut.js`
+- **Layer 3 (independent panels/tabs):** `listen_panel.js`, `export_panel.js`, `cut.js`, `landing.js`
 - **Layer 4 (orchestration):** `app.js`
 - **Worker & WASM bridges:** `worker.js`, `opus_bridge.js`, `mp3_bridge.js`,
   `opfs_store.js` (saved-demo cache in the browser's private storage), `vendor/`

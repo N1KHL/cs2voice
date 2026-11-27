@@ -173,8 +173,8 @@
   "landing.badge": "Prévia de exemplo",
   "landing.matchMeta": "de_mirage · 13–11 · Voz do time isolada",
   "landing.dragHint": "Experimente clicar num jogador, trocar de round ou arrastar a marca abaixo",
-  "landing.markHint": "Arraste a marca vermelha para ver o horário do report atualizar na hora",
-  "landing.cutHint": "Arraste os trechos em ciano — exporte clipes em MP3/WAV",
+  "landing.markHint": "Arraste a marca para ver o horário do report atualizar na hora",
+  "landing.cutHint": "Arraste os trechos de corte — exporte clipes em MP3/WAV",
   "landing.outputReport": "Report da FACEIT (sempre em inglês)",
   "landing.outputClips": "Clipes prontos para exportar",
   "landing.clipsZip": "{n} clipes · .zip"

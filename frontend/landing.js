@@ -10,30 +10,34 @@ const SAMPLE_PLAYERS = [
 ];
 
 const SAMPLE_ROUNDS = [
-  { id: 'r7', kind: 'round', number: 7, score: '5-2', talk: 38, allTalk: false, dur: 44 },
-  { id: 'ht', kind: 'halftime', label: 'Halftime', score: '6-6', talk: 19, allTalk: true, dur: 30 },
-  { id: 'kn', kind: 'knife', label: 'Knife', score: 'CT', talk: 14, allTalk: false, dur: 24 },
+  { id: 'r7', kind: 'round', number: 7, score: '5-2', talk: 38, allTalk: false, dur: 44, demoStart: 480 },
+  { id: 'ht', kind: 'halftime', label: 'Halftime', score: '6-6', talk: 19, allTalk: true, dur: 30, demoStart: 920 },
+  { id: 'kn', kind: 'knife', label: 'Knife', score: 'CT', talk: 14, allTalk: false, dur: 24, demoStart: 15 },
 ];
 
-// Deterministic voice blocks per round so the preview waveform looks authentic without audio files.
+// Deterministic voice blocks per round (including overlapping speech) so the
+// preview renders the same overlaid per-player envelopes as player.js.
 const WAVE_BLOCKS = {
   r7: [
-    { p: 0, s: 0.04, e: 0.19, amp: 0.55 },
-    { p: 1, s: 0.21, e: 0.30, amp: 0.42 },
-    { p: 2, s: 0.31, e: 0.62, amp: 0.92 },
-    { p: 0, s: 0.65, e: 0.78, amp: 0.60 },
-    { p: 2, s: 0.80, e: 0.95, amp: 0.85 },
+    { p: 0, s: 0.03, e: 0.18, amp: 0.56 },
+    { p: 1, s: 0.14, e: 0.30, amp: 0.44 },
+    { p: 2, s: 0.28, e: 0.62, amp: 0.90 },
+    { p: 0, s: 0.46, e: 0.58, amp: 0.48 },
+    { p: 0, s: 0.65, e: 0.79, amp: 0.62 },
+    { p: 1, s: 0.74, e: 0.87, amp: 0.52 },
+    { p: 2, s: 0.80, e: 0.96, amp: 0.84 },
   ],
   ht: [
-    { p: 1, s: 0.05, e: 0.25, amp: 0.58 },
-    { p: 2, s: 0.27, e: 0.56, amp: 0.88 },
-    { p: 0, s: 0.58, e: 0.76, amp: 0.50 },
-    { p: 2, s: 0.78, e: 0.94, amp: 0.79 },
+    { p: 1, s: 0.04, e: 0.25, amp: 0.58 },
+    { p: 2, s: 0.20, e: 0.55, amp: 0.88 },
+    { p: 0, s: 0.44, e: 0.74, amp: 0.54 },
+    { p: 1, s: 0.68, e: 0.84, amp: 0.46 },
+    { p: 2, s: 0.76, e: 0.95, amp: 0.80 },
   ],
   kn: [
-    { p: 0, s: 0.08, e: 0.34, amp: 0.62 },
-    { p: 1, s: 0.37, e: 0.60, amp: 0.48 },
-    { p: 2, s: 0.64, e: 0.89, amp: 0.75 },
+    { p: 0, s: 0.06, e: 0.34, amp: 0.62 },
+    { p: 1, s: 0.28, e: 0.60, amp: 0.50 },
+    { p: 2, s: 0.54, e: 0.89, amp: 0.78 },
   ],
 };
 
@@ -77,50 +81,104 @@ function drawPreviewWave() {
   const rect = canvasEl.getBoundingClientRect();
   const width = Math.max(240, Math.round(rect.width || 440));
   const height = Math.max(64, Math.round(rect.height || 74));
-  canvasEl.width = width * dpr;
-  canvasEl.height = height * dpr;
+  const targetW = Math.round(width * dpr);
+  const targetH = Math.round(height * dpr);
+  if (canvasEl.width !== targetW || canvasEl.height !== targetH) {
+    canvasEl.width = targetW;
+    canvasEl.height = targetH;
+  }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
 
   ctx.fillStyle = cssVar('--sunk');
   ctx.fillRect(0, 0, width, height);
 
-  const mid = height / 2;
-  ctx.strokeStyle = cssVar('--line');
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, mid);
-  ctx.lineTo(width, mid);
-  ctx.stroke();
+  const base = height - 4;
+  const top = 6;
 
-  const blocks = WAVE_BLOCKS[P.roundId] || WAVE_BLOCKS.r7;
-  const bars = Math.floor(width / 3);
-  for (let i = 0; i < bars; i++) {
-    const frac = (i + 0.5) / bars;
-    const hit = blocks.find(b => frac >= b.s && frac <= b.e && P.inAudio.has(SAMPLE_PLAYERS[b.p].id));
-    if (!hit) continue;
-    const pl = SAMPLE_PLAYERS[hit.p];
-    const rel = (frac - hit.s) / Math.max(0.01, hit.e - hit.s);
-    const env = Math.sin(rel * Math.PI);
-    const jitter = 0.55 + 0.45 * Math.abs(Math.sin(i * 1.9 + hit.p * 3.1));
-    const amp = Math.max(3, hit.amp * env * jitter * (height * 0.42));
-    ctx.fillStyle = pl.color;
-    ctx.fillRect(i * 3, mid - amp, 2, amp * 2);
-  }
-
-  // Highlight selected mark or cut range softly over the waveform.
+  // Highlight selected mark or cut range with the same band + 2px top bar as player.js.
   const ranges = P.tab === 'report' ? [P.mark] : P.cuts;
   const tint = P.tab === 'report' ? cssVar('--mark') : cssVar('--cut');
-  ctx.save();
-  ctx.globalAlpha = 0.14;
-  ctx.fillStyle = tint;
   for (const rg of ranges) {
     const x1 = rg.s * width;
     const x2 = rg.e * width;
-    ctx.fillRect(x1, 0, Math.max(2, x2 - x1), height);
+    const spanW = Math.max(1, x2 - x1);
+    ctx.globalAlpha = 0.13;
+    ctx.fillStyle = tint;
+    ctx.fillRect(x1, 0, spanW, height);
+    ctx.globalAlpha = 1;
+    ctx.fillRect(x1, 0, spanW, 2);
   }
-  ctx.restore();
 
-  // Subtle playhead indicator.
+  // One smooth outline per active player rising from a shared baseline, overlaid
+  // (not stacked), matching player.js so overlapping speakers remain distinct.
+  const blocks = WAVE_BLOCKS[P.roundId] || WAVE_BLOCKS.r7;
+  const curves = [];
+  for (let pIdx = 0; pIdx < SAMPLE_PLAYERS.length; pIdx++) {
+    const pl = SAMPLE_PLAYERS[pIdx];
+    if (!P.inAudio.has(pl.id)) continue;
+    const pBlocks = blocks.filter(b => b.p === pIdx);
+    const env = new Float32Array(width);
+    let total = 0;
+    for (let x = 0; x < width; x++) {
+      const frac = (x + 0.5) / width;
+      let val = 0;
+      for (const blk of pBlocks) {
+        if (frac < blk.s || frac > blk.e) continue;
+        const rel = (frac - blk.s) / Math.max(0.01, blk.e - blk.s);
+        // Smooth attack/release at edges with organic syllable ripples inside.
+        const edge = Math.sin(rel * Math.PI);
+        const edgeEnv = Math.pow(edge, 0.55);
+        const ripple = 0.62
+          + 0.22 * Math.sin(rel * Math.PI * 5 + pIdx * 1.7 + blk.s * 19)
+          + 0.16 * Math.sin(rel * Math.PI * 11 + pIdx * 3.1 + blk.e * 13);
+        const sample = Math.min(1, blk.amp * edgeEnv * Math.max(0.25, ripple));
+        if (sample > val) val = sample;
+      }
+      env[x] = val;
+      total += val;
+    }
+    if (total > 0) curves.push({ color: pl.color, env, total });
+  }
+
+  // Loudest-on-average first, so quieter voices are drawn on top.
+  curves.sort((a, b) => b.total - a.total);
+
+  for (const curve of curves) {
+    const e = curve.env;
+    ctx.beginPath();
+    ctx.moveTo(0, base);
+    for (let x = 0; x < width; x++) ctx.lineTo(x + 0.5, base - e[x] * (base - top));
+    ctx.lineTo(width, base);
+    ctx.closePath();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = curve.color;
+    ctx.fill();
+
+    // Outline only where the player talks (no colored line along the baseline).
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = curve.color;
+    ctx.lineWidth = 1.6;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    let on = false;
+    for (let x = 0; x < width; x++) {
+      const y = base - e[x] * (base - top);
+      if (e[x] > 0.005 || (x + 1 < width && e[x + 1] > 0.005)) {
+        on ? ctx.lineTo(x + 0.5, y) : ctx.moveTo(x + 0.5, y);
+        on = true;
+      } else if (on) {
+        ctx.lineTo(x + 0.5, base);
+        on = false;
+      }
+    }
+    ctx.stroke();
+  }
+
+  // Baseline + playhead indicator.
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = cssVar('--line');
+  ctx.fillRect(0, base, width, 1);
   const playX = Math.round((P.tab === 'report' ? P.mark.s : P.cuts[0].s) * width);
   ctx.fillStyle = cssVar('--text');
   ctx.fillRect(playX, 0, 1.5, height);
@@ -168,9 +226,11 @@ function makeRangePill(lane, range, index, pillCls, onChange) {
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   pill.addEventListener('pointerdown', ev => {
@@ -184,15 +244,29 @@ function makeRangePill(lane, range, index, pillCls, onChange) {
 function buildReportText() {
   const rd = activeRound();
   const rep = SAMPLE_PLAYERS.find(p => p.id === P.reportedId) || SAMPLE_PLAYERS[2];
-  const a = clock(P.mark.s * rd.dur);
-  const b = clock(P.mark.e * rd.dur);
+  const fileStart = P.mark.s * rd.dur;
+  const fileEnd = P.mark.e * rd.dur;
+  const demoS = rd.demoStart + fileStart;
+  const demoE = rd.demoStart + fileEnd;
+  const tick = Math.round(demoS * 64);
+  const clipFile = rd.allTalk
+    ? `alltalk_${rd.label}.mp3`
+    : `team_${rd.kind === 'round' ? 'R' + String(rd.number).padStart(2, '0') : rd.label}.mp3`;
+  const blocks = WAVE_BLOCKS[rd.id] || WAVE_BLOCKS.r7;
+  const speakers = [...new Set(
+    blocks
+      .filter(b => b.s < P.mark.e && b.e > P.mark.s && P.inAudio.has(SAMPLE_PLAYERS[b.p].id))
+      .map(b => SAMPLE_PLAYERS[b.p].name),
+  )].sort();
+  const speaking = speakers.length ? ` - speaking: ${speakers.join(', ')}` : '';
   return [
-    `Match: de_mirage (13-11) | Reason: Verbal abuse`,
-    `Reported player: ${rep.name}`,
-    `${roundEnglish(rd)} [${a}-${b}] -> team voice + isolated ${rep.name}.mp3`,
+    `Reported player(s): ${rep.name} | Reason: Toxic voice communication`,
+    `#1 ${clipFile} at ${clock(fileStart)}-${clock(fileEnd)}`,
+    `   ${roundEnglish(rd)} (demo ${clock(demoS)}-${clock(demoE)}, tick ${tick})${speaking}`,
   ].join('\n');
 }
 
+/** Render the interactive sample preview card on the landing screen. */
 export function renderLanding() {
   const host = $('#landing-preview');
   if (!host) return;
@@ -257,7 +331,8 @@ export function renderLanding() {
       row.append(el('span', 'talk' + (isAud ? ' has' : ''), clock(pl.talk)));
     }
     row.onclick = () => {
-      if (P.inAudio.has(pl.id) && P.inAudio.size > 1) P.inAudio.delete(pl.id);
+      const locked = P.tab === 'report' && pl.id === P.reportedId;
+      if (!locked && P.inAudio.has(pl.id) && P.inAudio.size > 1) P.inAudio.delete(pl.id);
       else P.inAudio.add(pl.id);
       renderLanding();
     };
@@ -296,8 +371,8 @@ export function renderLanding() {
         const item = el('div', 'preview-cliprow');
         item.append(
           el('span', 'cutrange-idx', `#${idx + 1}`),
-          el('span', 'preview-clipname', `clip_0${idx + 1}_${roundCode(rd)}_${sTxt}-${eTxt}.mp3`),
-          el('span', 'cutrange-dur', `${Math.max(1, Math.round((rg.e - rg.s) * rd.dur))}s`),
+          el('span', 'preview-clipname', `clip_${String(idx + 1).padStart(2, '0')}_${roundCode(rd)}_${sTxt}-${eTxt}.mp3`),
+          el('span', 'preview-clipdur', `${Math.max(1, Math.round((rg.e - rg.s) * rd.dur))}s`),
         );
         clips.append(item);
       });
@@ -331,10 +406,12 @@ export function renderLanding() {
   requestAnimationFrame(drawPreviewWave);
 }
 
+/** Redraw the landing preview waveform (e.g. on theme change or returning to the landing screen). */
 export function redrawLanding() {
   drawPreviewWave();
 }
 
+/** Wire static landing-screen controls and resize handling. */
 export function initLanding() {
   const dropOpen = $('#drop-open');
   if (dropOpen) dropOpen.onclick = () => $('#open').click();
@@ -342,6 +419,4 @@ export function initLanding() {
   window.addEventListener('resize', () => {
     if (!$('#empty').classList.contains('hidden')) drawPreviewWave();
   });
-
-  renderLanding();
 }
