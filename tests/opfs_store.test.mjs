@@ -65,11 +65,13 @@ class MemFileHandle {
   }
 }
 
-function loadStore({ withStorage = true } = {}) {
+function loadStore({ withStorage = true, locks = null } = {}) {
   const root = new MemDir();
+  const navigatorObj = withStorage ? { storage: { getDirectory: async () => root } } : {};
+  if (locks) navigatorObj.locks = locks;
   const sandbox = {
     Uint8Array, Blob, TextEncoder, TextDecoder, DOMException, crypto,
-    navigator: withStorage ? { storage: { getDirectory: async () => root } } : {},
+    navigator: navigatorObj,
     FileSystemFileHandle: MemFileHandle,
   };
   sandbox.self = sandbox;
@@ -170,4 +172,30 @@ test('demoKey depends on the content, not the file name', async () => {
   assert.equal(a, b);
   assert.notEqual(a, c);
   assert.match(a, /^[0-9a-z]+-[0-9a-f]{24}$/);
+});
+
+test('concurrent put and list serialize and use navigator.locks when available', async () => {
+  const lockCalls = [];
+  let active = 0;
+  let maxActive = 0;
+  const locks = {
+    async request(name, fn) {
+      lockCalls.push(name);
+      active++;
+      maxActive = Math.max(maxActive, active);
+      try { return await fn(); } finally { active--; }
+    },
+  };
+  const { store } = loadStore({ locks });
+  await Promise.all([
+    store.put('k1', bytes(1, 2), { map: 'de_mirage' }, 1000),
+    store.list(1000),
+    store.put('k2', bytes(3, 4), { map: 'de_inferno' }, 1001),
+    store.get('k1', 1002),
+  ]);
+  assert.equal(maxActive, 1);
+  assert.equal(lockCalls.length, 4);
+  assert.deepEqual(await keysOf(store, 1003), ['k1', 'k2']);
+  assert.deepEqual([...await store.get('k1', 1004)], [1, 2]);
+  assert.deepEqual([...await store.get('k2', 1004)], [3, 4]);
 });

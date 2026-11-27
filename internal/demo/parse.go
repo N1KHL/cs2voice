@@ -24,6 +24,20 @@ type breakSpan struct {
 	startTk, endTk int
 }
 
+// SetFile updates File, FaceitMatchID and Platform from name. Call before
+// rules.Apply when restoring a cached match opened under another file name.
+func (m *Match) SetFile(name string) {
+	if name == "" {
+		return
+	}
+	m.File = name
+	m.FaceitMatchID = faceitIDRe.FindString(strings.ToLower(filepath.Base(name)))
+	m.Platform = PlatformOther
+	if m.FaceitMatchID != "" || strings.Contains(strings.ToLower(m.Server), "faceit") {
+		m.Platform = PlatformFACEIT
+	}
+}
+
 // Parse reads a demo file (.dem or .dem.zst).
 func Parse(path string, progress Progress) (*Match, error) {
 	r, err := openDemo(path)

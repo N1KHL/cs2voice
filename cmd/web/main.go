@@ -22,6 +22,8 @@ const version = "0.1.0"
 var (
 	mu           sync.Mutex
 	currentMatch *demo.Match
+	currentKey   string
+	openSeq      int64
 )
 
 type MatchView struct {
@@ -80,9 +82,10 @@ type openResult struct {
 
 func main() {
 	js.Global().Set("cs2openDemo", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		file, onProgress, onDone := args[0], args[1], args[2]
+		file, key, onProgress, onDone := args[0], args[1].String(), args[2], args[3]
+		seq := nextOpenSeq()
 		go func() {
-			mv, err := openDemo(file, onProgress)
+			mv, err := openDemo(file, key, seq, onProgress)
 			var res openResult
 			if err != nil {
 				res.Error = err.Error()
@@ -113,7 +116,15 @@ func main() {
 	select {}
 }
 
-func openDemo(file, onProgress js.Value) (*MatchView, error) {
+func nextOpenSeq() int64 {
+	mu.Lock()
+	openSeq++
+	seq := openSeq
+	mu.Unlock()
+	return seq
+}
+
+func openDemo(file js.Value, key string, seq int64, onProgress js.Value) (*MatchView, error) {
 	size := int64(file.Get("size").Float())
 	name := file.Get("name").String()
 	br := &blobReader{blob: file, size: size, onProgress: onProgress}
@@ -121,25 +132,32 @@ func openDemo(file, onProgress js.Value) (*MatchView, error) {
 	if err != nil {
 		return nil, err
 	}
-	return installMatch(m), nil
+	return installMatch(m, key, seq)
 }
 
 // installMatch applies the all-talk rules and makes m the open match, for a
 // freshly parsed demo and for one restored from the cache alike. Its own
 // warnings go to the view only, so m stays as parsed and caching it, then
-// installing it again, never repeats them.
-func installMatch(m *demo.Match) *MatchView {
+// installing it again, never repeats them. If another open started while this
+// one was running, m is discarded so an older open cannot overwrite the newer
+// match or be snapshotted under the wrong key.
+func installMatch(m *demo.Match, key string, seq int64) (*MatchView, error) {
 	warnings := append([]string(nil), m.Warnings...)
 	rules.Apply(m)
 	if m.VoiceFormat == "" {
 		warnings = append(warnings, "This demo has no voice. Valve Matchmaking demos never have voice; other servers record it only with tv_relayvoice.")
 	}
 	mu.Lock()
+	if seq != openSeq {
+		mu.Unlock()
+		return nil, fmt.Errorf("superseded by another open")
+	}
 	currentMatch = m
+	currentKey = key
 	mu.Unlock()
 	v := matchView(m)
 	v.Warnings = warnings
-	return v
+	return v, nil
 }
 
 func matchView(m *demo.Match) *MatchView {

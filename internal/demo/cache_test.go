@@ -113,6 +113,36 @@ func TestMatchCacheRejectsTruncatedTrack(t *testing.T) {
 	}
 }
 
+func TestMatchSetFile(t *testing.T) {
+	id := "1-12345678-1234-1234-1234-123456789abc"
+	m := &Match{File: "renamed.dem.zst", Platform: PlatformOther}
+
+	// Empty name keeps existing metadata (used by OpenRecent).
+	m.SetFile("")
+	if m.File != "renamed.dem.zst" || m.FaceitMatchID != "" || m.Platform != PlatformOther {
+		t.Fatalf("empty SetFile changed metadata: %+v", m)
+	}
+
+	// Reopening under the original FACEIT filename recovers ID and platform.
+	m.SetFile(id + ".dem.zst")
+	if m.File != id+".dem.zst" || m.FaceitMatchID != id || m.Platform != PlatformFACEIT {
+		t.Fatalf("SetFile with FACEIT name: file=%q id=%q platform=%q", m.File, m.FaceitMatchID, m.Platform)
+	}
+
+	// Renaming back clears ID; Server still rescues PlatformFACEIT when present.
+	m.Server = "FACEIT London"
+	m.SetFile("copy.dem.zst")
+	if m.File != "copy.dem.zst" || m.FaceitMatchID != "" || m.Platform != PlatformFACEIT {
+		t.Fatalf("SetFile rename back with FACEIT server: file=%q id=%q platform=%q", m.File, m.FaceitMatchID, m.Platform)
+	}
+
+	m.Server = "other"
+	m.SetFile("copy.dem.zst")
+	if m.Platform != PlatformOther {
+		t.Fatalf("SetFile rename back with non-FACEIT server: platform=%q", m.Platform)
+	}
+}
+
 func TestMatchCacheRealDemo(t *testing.T) {
 	path := os.Getenv("CS2VOICE_TEST_DEMO")
 	if path == "" {

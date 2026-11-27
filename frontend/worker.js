@@ -78,7 +78,7 @@ const wasmReady = (async () => {
 })();
 
 // parseDemo reads the demo file in Go and reports progress to the page.
-function parseDemo(file, id) {
+function parseDemo(file, key, id) {
   let lastProgress = 0;
   return new Promise((resolve, reject) => {
     const onCrash = err => reject(err);
@@ -91,6 +91,7 @@ function parseDemo(file, id) {
     const fail = settle(reject);
     cs2openDemo(
       file,
+      String(key || ''),
       val => {
         const now = performance.now();
         if (now - lastProgress >= 80 || val >= 1) {
@@ -111,6 +112,16 @@ function parseDemo(file, id) {
   });
 }
 
+let workerOpenSeq = 0;
+
+function checkOpenSeq(seq) {
+  if (seq !== workerOpenSeq) {
+    const err = new Error('superseded by another open');
+    err.kind = 'superseded';
+    throw err;
+  }
+}
+
 async function demoKeyOf(file) {
   if (!opfsStore.available()) return '';
   try { return await opfsStore.demoKey(file); } catch { return ''; }
@@ -118,7 +129,7 @@ async function demoKeyOf(file) {
 
 // restoreCached installs a cached match in Go, or returns null so the caller
 // parses the demo instead. A snapshot that fails to load is dropped.
-async function restoreCached(key) {
+async function restoreCached(key, fileName, seq) {
   if (!key || !opfsStore.available()) return null;
   let bytes;
   try {
@@ -126,8 +137,9 @@ async function restoreCached(key) {
   } catch {
     return null; // storage busy or blocked: keep the snapshot for next time
   }
+  checkOpenSeq(seq);
   if (!bytes) return null;
-  const parsed = JSON.parse(cs2restore(bytes));
+  const parsed = JSON.parse(cs2restore(bytes, String(key), String(fileName || '')));
   if (!parsed.error) return parsed.data;
   try { await opfsStore.remove(key); } catch {}
   return null;
@@ -137,9 +149,7 @@ async function restoreCached(key) {
 // for the Go runtime (the recent list shows up before main.wasm has loaded).
 const storeCalls = {
   async ListRecent() {
-    return opfsStore.available()
-      ? { available: true, entries: await opfsStore.list() }
-      : { available: false, entries: [] };
+    return { entries: opfsStore.available() ? await opfsStore.list() : [] };
   },
   async ForgetDemo(key) {
     await opfsStore.remove(String(key || ''));
@@ -163,18 +173,24 @@ self.onmessage = async ({ data }) => {
     if (wasmCrashed) throw wasmCrashed;
     switch (name) {
       case 'OpenDemo': {
+        const seq = ++workerOpenSeq;
         const file = args[0];
         const key = await demoKeyOf(file);
-        let match = key ? await restoreCached(key) : null;
+        checkOpenSeq(seq);
+        let match = key ? await restoreCached(key, file.name, seq) : null;
+        checkOpenSeq(seq);
         const cached = !!match;
-        if (!match) match = await parseDemo(file, id);
+        if (!match) match = await parseDemo(file, key, id);
+        checkOpenSeq(seq);
         self.postMessage({ id, result: { key, match, cached } });
         break;
       }
 
       case 'OpenRecent': {
+        const seq = ++workerOpenSeq;
         const key = String(args[0] || '');
-        const match = await restoreCached(key);
+        const match = await restoreCached(key, '', seq);
+        checkOpenSeq(seq);
         if (!match) {
           const err = new Error('saved demo not found');
           err.kind = 'sessionGone';
@@ -188,7 +204,7 @@ self.onmessage = async ({ data }) => {
         // After OpenDemo, so the page shows the match before the snapshot is
         // encoded and written.
         const [key, meta] = args;
-        const snap = cs2snapshot();
+        const snap = cs2snapshot(String(key || ''));
         if (!snap || snap.error) throw new Error((snap && snap.error) || 'snapshot failed');
         await opfsStore.put(String(key), snap.bytes, meta || {});
         self.postMessage({ id, result: true });

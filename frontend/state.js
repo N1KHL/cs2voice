@@ -29,6 +29,7 @@ export let M = null;            // match view
 export let colors = {};         // player id -> color
 export let playerById = {};
 export let periodById = {};
+let periodByKey = {};
 export let activeTab = safeGet('tab') === 'cut' ? 'cut' : 'report';
 
 export const L = {
@@ -110,12 +111,20 @@ export function reasonText(reasons = R.reasons, other = R.reasonOther) {
   return parts.join('; ');
 }
 
+// Stable identity for a period so a rules.json change or CacheVersion bump
+// that renumbers period IDs cannot silently select different rounds.
+function periodKey(p) {
+  const start = Number.isFinite(p.start) ? Math.round(p.start * 1000) : 0;
+  return `${p.kind || ''}:${p.number || 0}:${start}`;
+}
+
 /** Install a newly parsed match and reset panel selections to defaults. */
 export function setMatch(match) {
   M = match;
   colors = {};
   playerById = {};
   periodById = {};
+  periodByKey = {};
 
   if (!match) return;
 
@@ -127,7 +136,10 @@ export function setMatch(match) {
     colors[p.id] = PALETTE[i % PALETTE.length];
     playerById[p.id] = p;
   });
-  periods.forEach(p => { periodById[p.id] = p; });
+  periods.forEach(p => {
+    periodById[p.id] = p;
+    periodByKey[periodKey(p)] = p;
+  });
 
   const defaultTeam = teams[0] || '';
   const firstRound = periods.find(p => p.kind === 'round' && talkIn(p, teamPlayers(defaultTeam, match)) > 0) || periods[0];
@@ -163,12 +175,13 @@ const SESSION_VERSION = 1;
 
 /** Serializable copy of the selections, marks and report edits of all panels. */
 export function snapshotState() {
+  const periodKeys = set => [...set].map(id => periodById[id] && periodKey(periodById[id])).filter(Boolean);
   return {
     v: SESSION_VERSION,
     tab: activeTab,
-    L: { team: L.team, periods: [...L.periods], players: [...L.players], mode: L.mode, normalize: L.normalize },
+    L: { team: L.team, periods: periodKeys(L.periods), players: [...L.players], mode: L.mode, normalize: L.normalize },
     R: {
-      team: R.team, periods: [...R.periods], audio: [...R.audio], reported: [...R.reported],
+      team: R.team, periods: periodKeys(R.periods), audio: [...R.audio], reported: [...R.reported],
       mode: R.mode, perRound: R.perRound, format: R.format,
       includeFull: R.includeFull, includeIsolated: R.includeIsolated, matchId: R.matchId,
       marks: R.marks.map(m => ({ start: m.start, end: m.end })),
@@ -176,7 +189,7 @@ export function snapshotState() {
       reportEdited: R.reportEdited, reportText: R.reportEdited ? R.reportText : '',
     },
     C: {
-      team: C.team, periods: [...C.periods], players: [...C.players], mode: C.mode,
+      team: C.team, periods: periodKeys(C.periods), players: [...C.players], mode: C.mode,
       normalize: C.normalize, format: C.format, matchId: C.matchId,
       ranges: C.ranges.map(m => ({ start: m.start, end: m.end })),
     },
@@ -185,10 +198,16 @@ export function snapshotState() {
 
 function spans(list) {
   const max = M && M.duration > 0 ? M.duration : Infinity;
-  return (Array.isArray(list) ? list : [])
-    .filter(s => s && Number.isFinite(s.start) && Number.isFinite(s.end) && s.start >= 0 && s.start < s.end && s.end <= max)
-    .map(s => ({ start: s.start, end: s.end }))
-    .sort((a, b) => a.start - b.start);
+  const out = [];
+  for (const s of Array.isArray(list) ? list : []) {
+    if (!s || !Number.isFinite(s.start) || !Number.isFinite(s.end)) continue;
+    // Rendered segments can run slightly past M.duration; clamp end rather than
+    // dropping a "mark to end of match" span on reload.
+    if (s.start < 0 || s.start >= max) continue;
+    const end = Math.min(s.end, max);
+    if (s.start < end) out.push({ start: s.start, end });
+  }
+  return out.sort((a, b) => a.start - b.start);
 }
 
 /**
@@ -203,13 +222,20 @@ export function restoreState(saved) {
   const allTeams = M.teams || [];
   const teams = allTeams.filter(Boolean); // Export never picks spectators
   const team = (tm, fallback, list = allTeams) => (list.includes(tm) ? tm : fallback);
-  // A saved list that lost every entry (e.g. periods renumbered) keeps the default.
+  // A saved list that lost every entry (e.g. periods split or removed) keeps the default.
   const ids = (list, known, fallback) => {
     const arr = Array.isArray(list) ? list : [];
     const kept = arr.filter(id => known[id]);
     return arr.length && !kept.length ? new Set(fallback) : new Set(kept);
   };
-  const periods = (list, fallback = []) => ids(list, periodById, fallback);
+  const periods = (list, fallback = []) => {
+    const arr = Array.isArray(list) ? list : [];
+    const kept = [];
+    for (const k of arr) {
+      if (typeof k === 'string' && periodByKey[k]) kept.push(periodByKey[k].id);
+    }
+    return arr.length && !kept.length ? new Set(fallback) : new Set(kept);
+  };
   const players = (list, fallback = []) => ids(list, playerById, fallback);
   const mode = (m, fallback) => (m === 'compact' || m === 'full' ? m : fallback);
   const format = (f, fallback) => (f === 'mp3' || f === 'wav' ? f : fallback);

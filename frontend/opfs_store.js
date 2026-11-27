@@ -7,9 +7,26 @@
 (() => {
   const DIR = 'sessions';
   const INDEX = 'index.json';
+  const LOCK_NAME = 'cs2voice-opfs-sessions';
   const KEEP_MS = 7 * 24 * 60 * 60 * 1000; // since the demo was last opened
   const KEEP_MAX = 10;
   const HASH_SPAN = 1 << 20;
+
+  let chain = Promise.resolve();
+
+  // Serialize store operations within this worker and across tabs so
+  // read-modify-write on index.json and orphan sweeps never race.
+  function withLock(fn) {
+    const run = () => {
+      if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+        return navigator.locks.request(LOCK_NAME, fn);
+      }
+      return fn();
+    };
+    const next = chain.then(run, run);
+    chain = next.catch(() => {});
+    return next;
+  }
 
   function available() {
     return typeof navigator !== 'undefined' && !!navigator.storage &&
@@ -112,53 +129,63 @@
     return idx;
   }
 
-  async function put(key, bytes, meta, now = Date.now()) {
-    const dir = await folder();
-    await writeBytes(dir, binName(key), bytes);
-    const idx = await readIndex(dir);
-    idx[key] = { ...meta, key, bytes: bytes.byteLength, savedAt: now, openedAt: now };
-    await writeIndex(dir, idx);
-    await prune(dir, idx, now);
-  }
-
-  async function get(key, now = Date.now()) {
-    const dir = await folder();
-    const idx = await readIndex(dir);
-    if (!idx[key]) return null;
-    const bytes = await readBytes(dir, binName(key));
-    if (!bytes) {
-      delete idx[key];
+  function put(key, bytes, meta, now = Date.now()) {
+    return withLock(async () => {
+      const dir = await folder();
+      await writeBytes(dir, binName(key), bytes);
+      const idx = await readIndex(dir);
+      idx[key] = { ...meta, key, bytes: bytes.byteLength, savedAt: now, openedAt: now };
       await writeIndex(dir, idx);
-      return null;
-    }
-    idx[key].openedAt = now;
-    await writeIndex(dir, idx);
-    return bytes;
+      await prune(dir, idx, now);
+    });
   }
 
-  async function list(now = Date.now()) {
-    const dir = await folder();
-    const idx = await prune(dir, await readIndex(dir), now);
-    return Object.values(idx).sort((a, b) => b.openedAt - a.openedAt);
-  }
-
-  async function remove(key) {
-    const dir = await folder();
-    const idx = await readIndex(dir);
-    await removeFile(dir, binName(key));
-    if (idx[key]) {
-      delete idx[key];
+  function get(key, now = Date.now()) {
+    return withLock(async () => {
+      const dir = await folder();
+      const idx = await readIndex(dir);
+      if (!idx[key]) return null;
+      const bytes = await readBytes(dir, binName(key));
+      if (!bytes) {
+        delete idx[key];
+        await writeIndex(dir, idx);
+        return null;
+      }
+      idx[key].openedAt = now;
       await writeIndex(dir, idx);
-    }
+      return bytes;
+    });
   }
 
-  async function clear() {
-    const root = await navigator.storage.getDirectory();
-    try {
-      await root.removeEntry(DIR, { recursive: true });
-    } catch (err) {
-      if (!err || err.name !== 'NotFoundError') throw err;
-    }
+  function list(now = Date.now()) {
+    return withLock(async () => {
+      const dir = await folder();
+      const idx = await prune(dir, await readIndex(dir), now);
+      return Object.values(idx).sort((a, b) => b.openedAt - a.openedAt);
+    });
+  }
+
+  function remove(key) {
+    return withLock(async () => {
+      const dir = await folder();
+      const idx = await readIndex(dir);
+      await removeFile(dir, binName(key));
+      if (idx[key]) {
+        delete idx[key];
+        await writeIndex(dir, idx);
+      }
+    });
+  }
+
+  function clear() {
+    return withLock(async () => {
+      const root = await navigator.storage.getDirectory();
+      try {
+        await root.removeEntry(DIR, { recursive: true });
+      } catch (err) {
+        if (!err || err.name !== 'NotFoundError') throw err;
+      }
+    });
   }
 
   self.opfsStore = { available, demoKey, put, get, list, remove, clear, expiredKeys, KEEP_MS, KEEP_MAX };

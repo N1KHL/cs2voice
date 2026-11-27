@@ -276,7 +276,11 @@ export function initExportPanel() {
   rightPlayer.set(null, '');
   renderDelivery();
 
-  $('#reasonother').oninput = debounce(e => { R.reasonOther = e.target.value; refreshRight(); }, 400);
+  const refreshReasonOther = debounce(() => refreshRight(), 400);
+  $('#reasonother').oninput = e => {
+    R.reasonOther = e.target.value;
+    refreshReasonOther();
+  };
   $('#clearmarks').onclick = () => {
     R.marks = [];
     rightPlayer.marksChanged();

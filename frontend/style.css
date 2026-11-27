@@ -53,7 +53,8 @@ header { display: flex; align-items: center; gap: 8px 14px; flex-wrap: nowrap; p
 
 .warnings { background: var(--warn-bg); color: var(--warn); padding: 6px 16px; border-bottom: 1px solid var(--warn-line); }
 
-.empty { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 16px; overflow: auto; }
+.empty { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 16px; overflow: auto; }
+.empty::before, .empty::after { content: ''; flex: 1 0 0; }
 .drop { border: 2px dashed var(--line); border-radius: 14px; padding: 60px 90px; text-align: center; }
 .drop-title { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
 .drop-sub { color: var(--dim); }
