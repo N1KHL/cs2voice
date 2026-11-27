@@ -11,6 +11,10 @@ FACEIT demos** (`*.dem.zst` or `*.dem`) entirely inside the user's browser.
 
 - **Privacy invariant:** Everything runs client-side. Nothing is ever uploaded,
   and no external analytics, tracking, or third-party API calls may be added.
+  The only thing kept between visits is the saved-demo cache, inside the
+  browser: the parsed match (voice included) in OPFS and the user's
+  selections/marks in `localStorage`, dropped after 7 days without opening and
+  deletable from the start screen.
 - **License:** MIT (`LICENSE`). Third-party notices and vendored library rules
   (including keeping LGPL `frontend/vendor/mp3.wasm` as a separate replaceable
   file) are tracked in `THIRD_PARTY_NOTICES.md` and `licenses/`.
@@ -44,13 +48,18 @@ Do not simplify or relax these rules without explicit maintainer approval:
 9. **No CS2 or FACEIT trademarks/logos** anywhere in assets.
 10. **FACEIT support URL is fixed:**
     `https://support.faceit.com/hc/en-us/requests/new`.
+11. **Saved demos never go stale.** Bump `demo.CacheVersion`
+    (`internal/demo/cache.go`) whenever the parser's output or the cached
+    layout changes. All-talk is never cached: `rules.Apply` runs again on
+    every restore, and restored selections are validated against the match
+    (`restoreState` in `frontend/state.js`) so a stale save cannot mix teams.
 
 ## 3. Repository layout
 
 ```
 cmd/web/             Go WASM worker RPC layer (//go:build js && wasm)
 cmd/demoinfo/        Native dev CLI for inspecting demos
-internal/demo/       Demo parser, match model, rounds, voice packets, all-talk
+internal/demo/       Demo parser, match model, rounds, voice packets, all-talk, match cache
 internal/rules/      Embedded rules.json for all-talk detection
 internal/audio/      Plan, Render, Clip, Export, ExportToMemory, ZIP, Ogg, WAV
 internal/codec/      Codec abstractions: js&&wasm bridges, !js stubs (WAV is pure Go)
@@ -71,7 +80,7 @@ licenses/            Full license texts bundled into build/web/licenses.txt
 - Layer 2: `player.js`
 - Layer 3: `listen_panel.js`, `export_panel.js`, `cut.js` (must not import each other)
 - Layer 4: `app.js`
-- Worker: `worker.js` + `opus_bridge.js` + `mp3_bridge.js`
+- Worker: `worker.js` + `opus_bridge.js` + `mp3_bridge.js` + `opfs_store.js`
 
 Never name a local variable `t` in `frontend/*.js` (it shadows `t(key, vars)`).
 

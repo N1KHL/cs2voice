@@ -29,6 +29,7 @@ export let M = null;            // match view
 export let colors = {};         // player id -> color
 export let playerById = {};
 export let periodById = {};
+let periodByKey = {};
 export let activeTab = safeGet('tab') === 'cut' ? 'cut' : 'report';
 
 export const L = {
@@ -55,6 +56,7 @@ export const R = {
   files: [],
   fileIdx: 0,
   reportEdited: false,
+  reportText: '', // the report as edited by hand; used while reportEdited
   marks: [], // marked (toxic) moments, demo seconds [{start, end}], kept across files and modes
   reasons: new Set(),
   reasonOther: '',
@@ -109,12 +111,20 @@ export function reasonText(reasons = R.reasons, other = R.reasonOther) {
   return parts.join('; ');
 }
 
+// Stable identity for a period so a rules.json change or CacheVersion bump
+// that renumbers period IDs cannot silently select different rounds.
+function periodKey(p) {
+  const start = Number.isFinite(p.start) ? Math.round(p.start * 1000) : 0;
+  return `${p.kind || ''}:${p.number || 0}:${start}`;
+}
+
 /** Install a newly parsed match and reset panel selections to defaults. */
 export function setMatch(match) {
   M = match;
   colors = {};
   playerById = {};
   periodById = {};
+  periodByKey = {};
 
   if (!match) return;
 
@@ -126,7 +136,10 @@ export function setMatch(match) {
     colors[p.id] = PALETTE[i % PALETTE.length];
     playerById[p.id] = p;
   });
-  periods.forEach(p => { periodById[p.id] = p; });
+  periods.forEach(p => {
+    periodById[p.id] = p;
+    periodByKey[periodKey(p)] = p;
+  });
 
   const defaultTeam = teams[0] || '';
   const firstRound = periods.find(p => p.kind === 'round' && talkIn(p, teamPlayers(defaultTeam, match)) > 0) || periods[0];
@@ -144,6 +157,7 @@ export function setMatch(match) {
   R.files = [];
   R.fileIdx = 0;
   R.reportEdited = false;
+  R.reportText = '';
   R.marks = [];
   R.reasons = new Set();
   R.reasonOther = '';
@@ -152,4 +166,119 @@ export function setMatch(match) {
   C.periods = new Set(defaultPeriods);
   C.players = new Set(allPlayerIds);
   C.ranges = [];
+}
+
+// ---------- saved sessions ----------
+
+// SESSION_VERSION changes when the shape below does; older saves are ignored.
+const SESSION_VERSION = 1;
+
+/** Serializable copy of the selections, marks and report edits of all panels. */
+export function snapshotState() {
+  const periodKeys = set => [...set].map(id => periodById[id] && periodKey(periodById[id])).filter(Boolean);
+  return {
+    v: SESSION_VERSION,
+    tab: activeTab,
+    L: { team: L.team, periods: periodKeys(L.periods), players: [...L.players], mode: L.mode, normalize: L.normalize },
+    R: {
+      team: R.team, periods: periodKeys(R.periods), audio: [...R.audio], reported: [...R.reported],
+      mode: R.mode, perRound: R.perRound, format: R.format,
+      includeFull: R.includeFull, includeIsolated: R.includeIsolated, matchId: R.matchId,
+      marks: R.marks.map(m => ({ start: m.start, end: m.end })),
+      reasons: [...R.reasons], reasonOther: R.reasonOther,
+      reportEdited: R.reportEdited, reportText: R.reportEdited ? R.reportText : '',
+    },
+    C: {
+      team: C.team, periods: periodKeys(C.periods), players: [...C.players], mode: C.mode,
+      normalize: C.normalize, format: C.format, matchId: C.matchId,
+      ranges: C.ranges.map(m => ({ start: m.start, end: m.end })),
+    },
+  };
+}
+
+function spans(list) {
+  const max = M && M.duration > 0 ? M.duration : Infinity;
+  const out = [];
+  for (const s of Array.isArray(list) ? list : []) {
+    if (!s || !Number.isFinite(s.start) || !Number.isFinite(s.end)) continue;
+    // Rendered segments can run slightly past M.duration; clamp end rather than
+    // dropping a "mark to end of match" span on reload.
+    if (s.start < 0 || s.start >= max) continue;
+    const end = Math.min(s.end, max);
+    if (s.start < end) out.push({ start: s.start, end });
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Apply a saved session on top of the defaults set by setMatch. Anything that
+ * no longer fits the match (a period or player gone after a parser change, an
+ * unknown option) keeps its default, so a stale save can never break team
+ * isolation: "both teams" survives only when every saved period is all-talk.
+ * Returns false when the save is unusable.
+ */
+export function restoreState(saved) {
+  if (!M || !saved || saved.v !== SESSION_VERSION) return false;
+  const allTeams = M.teams || [];
+  const teams = allTeams.filter(Boolean); // Export never picks spectators
+  const team = (tm, fallback, list = allTeams) => (list.includes(tm) ? tm : fallback);
+  // A saved list that lost every entry (e.g. periods split or removed) keeps the default.
+  const ids = (list, known, fallback) => {
+    const arr = Array.isArray(list) ? list : [];
+    const kept = arr.filter(id => known[id]);
+    return arr.length && !kept.length ? new Set(fallback) : new Set(kept);
+  };
+  const periods = (list, fallback = []) => {
+    const arr = Array.isArray(list) ? list : [];
+    const kept = [];
+    for (const k of arr) {
+      if (typeof k === 'string' && periodByKey[k]) kept.push(periodByKey[k].id);
+    }
+    return arr.length && !kept.length ? new Set(fallback) : new Set(kept);
+  };
+  const players = (list, fallback = []) => ids(list, playerById, fallback);
+  const mode = (m, fallback) => (m === 'compact' || m === 'full' ? m : fallback);
+  const format = (f, fallback) => (f === 'mp3' || f === 'wav' ? f : fallback);
+  const bool = (b, fallback) => (typeof b === 'boolean' ? b : fallback);
+  const text = (s, fallback) => (typeof s === 'string' ? s : fallback);
+
+  const l = saved.L || {};
+  L.team = team(l.team, L.team);
+  L.periods = periods(l.periods, L.periods);
+  L.players = players(l.players, L.players);
+  L.mode = mode(l.mode, L.mode);
+  L.normalize = bool(l.normalize, L.normalize);
+
+  const r = saved.R || {};
+  R.periods = periods(r.periods);
+  const allTalkOnly = R.periods.size > 0 && [...R.periods].every(id => periodById[id].allTalk);
+  R.team = r.team === BOTH && allTalkOnly ? BOTH : team(r.team, R.team, teams);
+  const rightTeams = R.team === BOTH ? teams : [R.team];
+  const onRightTeam = id => rightTeams.includes(playerById[id].team);
+  R.audio = new Set([...players(r.audio)].filter(onRightTeam));
+  R.reported = new Set([...players(r.reported)].filter(onRightTeam));
+  R.mode = mode(r.mode, R.mode);
+  R.perRound = bool(r.perRound, R.perRound);
+  R.format = format(r.format, R.format);
+  R.includeFull = bool(r.includeFull, R.includeFull);
+  R.includeIsolated = bool(r.includeIsolated, R.includeIsolated);
+  R.matchId = bool(r.matchId, R.matchId);
+  R.marks = spans(r.marks);
+  R.reasons = new Set((Array.isArray(r.reasons) ? r.reasons : []).filter(k => REASONS.some(x => x.key === k)));
+  R.reasonOther = text(r.reasonOther, '');
+  R.reportText = text(r.reportText, '');
+  R.reportEdited = r.reportEdited === true && R.reportText !== '';
+
+  const c = saved.C || {};
+  C.team = team(c.team, C.team);
+  C.periods = periods(c.periods, C.periods);
+  C.players = players(c.players, C.players);
+  C.mode = mode(c.mode, C.mode);
+  C.normalize = bool(c.normalize, C.normalize);
+  C.format = format(c.format, C.format);
+  C.matchId = bool(c.matchId, C.matchId);
+  C.ranges = spans(c.ranges);
+
+  if (saved.tab === 'cut' || saved.tab === 'report') setActiveTab(saved.tab);
+  return true;
 }

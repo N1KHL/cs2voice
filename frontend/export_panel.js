@@ -276,7 +276,11 @@ export function initExportPanel() {
   rightPlayer.set(null, '');
   renderDelivery();
 
-  $('#reasonother').oninput = debounce(e => { R.reasonOther = e.target.value; refreshRight(); }, 400);
+  const refreshReasonOther = debounce(() => refreshRight(), 400);
+  $('#reasonother').oninput = e => {
+    R.reasonOther = e.target.value;
+    refreshReasonOther();
+  };
   $('#clearmarks').onclick = () => {
     R.marks = [];
     rightPlayer.marksChanged();
@@ -351,9 +355,9 @@ export function initExportPanel() {
     };
   }
 
-  $('#report').oninput = () => { R.reportEdited = true; };
+  $('#report').oninput = e => { R.reportEdited = true; R.reportText = e.target.value; };
   $('#faceit').onclick = openFaceitTicket;
-  $('#regen').onclick = () => { R.reportEdited = false; refreshRight(); };
+  $('#regen').onclick = () => { R.reportEdited = false; R.reportText = ''; refreshRight(); };
   $('#copyreport').onclick = async () => {
     const b = $('#copyreport');
     try { await navigator.clipboard.writeText($('#report').value); }
@@ -366,7 +370,9 @@ export function initExportPanel() {
 
 export function setupExport() {
   lastPreviewKey = '';
-  $('#reasonother').value = '';
+  // Filled from the state, which may come from a saved session.
+  $('#reasonother').value = R.reasonOther;
+  $('#report').value = R.reportEdited ? R.reportText : '';
   renderReasons();
   renderRight();
   renderMarkLinks();

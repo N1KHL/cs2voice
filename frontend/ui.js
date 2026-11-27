@@ -25,10 +25,22 @@ export function debounce(fn, ms) {
   };
 }
 
-export const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
-};
+function webStore(area) {
+  const s = () => window[area]; // the getter itself throws when storage is blocked
+  return {
+    get(k) { try { return s().getItem(k); } catch { return null; } },
+    set(k, v) { try { s().setItem(k, v); return true; } catch { return false; } },
+    remove(k) { try { s().removeItem(k); } catch {} },
+    keys(prefix = '') {
+      try { return Object.keys(s()).filter(k => k.startsWith(prefix)); } catch { return []; }
+    },
+  };
+}
+
+// store keeps preferences and saved sessions; tabStore lives only as long as
+// the tab, so it survives a reload but not opening the site again.
+export const store = webStore('localStorage');
+export const tabStore = webStore('sessionStorage');
 
 export function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();

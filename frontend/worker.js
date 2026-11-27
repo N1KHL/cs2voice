@@ -1,6 +1,7 @@
 importScripts('wasm_exec.js');
 importScripts('opus_bridge.js');
 importScripts('vendor/WasmMediaEncoder.min.js', 'mp3_bridge.js');
+importScripts('opfs_store.js');
 
 let wasmCrashed = null;
 const crashListeners = new Set();
@@ -8,6 +9,7 @@ const crashListeners = new Set();
 function classifyError(err) {
   const name = (err && err.name) || '';
   const msg = (err && err.message) ? err.message : String(err || 'Unknown error');
+  if (err && err.kind) return { error: msg, errorName: name, errorKind: err.kind };
   if (
     name === 'RangeError' ||
     name === 'RuntimeError' ||
@@ -75,46 +77,137 @@ const wasmReady = (async () => {
   );
 })();
 
+// parseDemo reads the demo file in Go and reports progress to the page.
+function parseDemo(file, key, id) {
+  let lastProgress = 0;
+  return new Promise((resolve, reject) => {
+    const onCrash = err => reject(err);
+    crashListeners.add(onCrash);
+    const settle = fn => val => {
+      crashListeners.delete(onCrash);
+      fn(val);
+    };
+    const ok = settle(resolve);
+    const fail = settle(reject);
+    cs2openDemo(
+      file,
+      String(key || ''),
+      val => {
+        const now = performance.now();
+        if (now - lastProgress >= 80 || val >= 1) {
+          lastProgress = now;
+          self.postMessage({ type: 'progress', id, value: val });
+        }
+      },
+      json => {
+        try {
+          const parsed = JSON.parse(json);
+          if (parsed.error) fail(new Error(parsed.error));
+          else ok(parsed.data);
+        } catch (err) {
+          fail(err);
+        }
+      }
+    );
+  });
+}
+
+let workerOpenSeq = 0;
+
+function checkOpenSeq(seq) {
+  if (seq !== workerOpenSeq) {
+    const err = new Error('superseded by another open');
+    err.kind = 'superseded';
+    throw err;
+  }
+}
+
+async function demoKeyOf(file) {
+  if (!opfsStore.available()) return '';
+  try { return await opfsStore.demoKey(file); } catch { return ''; }
+}
+
+// restoreCached installs a cached match in Go, or returns null so the caller
+// parses the demo instead. A snapshot that fails to load is dropped.
+async function restoreCached(key, fileName, seq) {
+  if (!key || !opfsStore.available()) return null;
+  let bytes;
+  try {
+    bytes = await opfsStore.get(key);
+  } catch {
+    return null; // storage busy or blocked: keep the snapshot for next time
+  }
+  checkOpenSeq(seq);
+  if (!bytes) return null;
+  const parsed = JSON.parse(cs2restore(bytes, String(key), String(fileName || '')));
+  if (!parsed.error) return parsed.data;
+  try { await opfsStore.remove(key); } catch {}
+  return null;
+}
+
+// storeCalls only touch the saved-demo cache, so they answer without waiting
+// for the Go runtime (the recent list shows up before main.wasm has loaded).
+const storeCalls = {
+  async ListRecent() {
+    return { entries: opfsStore.available() ? await opfsStore.list() : [] };
+  },
+  async ForgetDemo(key) {
+    await opfsStore.remove(String(key || ''));
+    return true;
+  },
+  async ClearSaved() {
+    await opfsStore.clear();
+    return true;
+  },
+};
+
 self.onmessage = async ({ data }) => {
   const { id, name, args = [] } = data;
   try {
+    if (Object.hasOwn(storeCalls, name)) {
+      self.postMessage({ id, result: await storeCalls[name](...args) });
+      return;
+    }
     if (wasmCrashed) throw wasmCrashed;
     await wasmReady;
     if (wasmCrashed) throw wasmCrashed;
     switch (name) {
       case 'OpenDemo': {
+        const seq = ++workerOpenSeq;
         const file = args[0];
-        let lastProgress = 0;
-        const result = await new Promise((resolve, reject) => {
-          const onCrash = err => reject(err);
-          crashListeners.add(onCrash);
-          const settle = fn => val => {
-            crashListeners.delete(onCrash);
-            fn(val);
-          };
-          const ok = settle(resolve);
-          const fail = settle(reject);
-          cs2openDemo(
-            file,
-            val => {
-              const now = performance.now();
-              if (now - lastProgress >= 80 || val >= 1) {
-                lastProgress = now;
-                self.postMessage({ type: 'progress', id, value: val });
-              }
-            },
-            json => {
-              try {
-                const parsed = JSON.parse(json);
-                if (parsed.error) fail(new Error(parsed.error));
-                else ok(parsed.data);
-              } catch (err) {
-                fail(err);
-              }
-            }
-          );
-        });
-        self.postMessage({ id, result });
+        const key = await demoKeyOf(file);
+        checkOpenSeq(seq);
+        let match = key ? await restoreCached(key, file.name, seq) : null;
+        checkOpenSeq(seq);
+        const cached = !!match;
+        if (!match) match = await parseDemo(file, key, id);
+        checkOpenSeq(seq);
+        self.postMessage({ id, result: { key, match, cached } });
+        break;
+      }
+
+      case 'OpenRecent': {
+        const seq = ++workerOpenSeq;
+        const key = String(args[0] || '');
+        const match = await restoreCached(key, '', seq);
+        checkOpenSeq(seq);
+        if (!match) {
+          const err = new Error('saved demo not found');
+          err.kind = 'sessionGone';
+          throw err;
+        }
+        self.postMessage({ id, result: { key, match, cached: true } });
+        break;
+      }
+
+      case 'SaveDemo': {
+        // After OpenDemo, so the page shows the match before the snapshot is
+        // encoded and written.
+        const [key, meta] = args;
+        const snap = cs2snapshot(String(key || ''));
+        if (!snap || snap.error) throw new Error((snap && snap.error) || 'snapshot failed');
+        await opfsStore.put(String(key), snap.bytes, meta || {});
+        self.postMessage({ id, result: true });
         break;
       }
 
