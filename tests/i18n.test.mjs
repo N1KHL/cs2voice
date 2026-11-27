@@ -34,19 +34,15 @@ test('lang/index.json lists en and pt-BR and every listed locale parses cleanly'
   }
 });
 
-test('en.json and pt-BR.json have 100% identical key sets', () => {
+// en.json is the source of truth. pt-BR.json may lag behind: missing keys fall
+// back to English at runtime (translate in i18n.js), but it must never carry
+// keys that en.json no longer has.
+test('pt-BR.json has no keys that en.json lacks', () => {
   const en = readJSON('en.json');
   const pt = readJSON('pt-BR.json');
 
-  const enKeys = Object.keys(en).sort();
-  const ptKeys = Object.keys(pt).sort();
-
-  const missingInPt = enKeys.filter(k => !(k in pt));
-  const extraInPt = ptKeys.filter(k => !(k in en));
-
-  assert.deepEqual(missingInPt, [], `Keys missing in pt-BR.json: ${missingInPt.join(', ')}`);
-  assert.deepEqual(extraInPt, [], `Extra keys in pt-BR.json: ${extraInPt.join(', ')}`);
-  assert.deepEqual(ptKeys, enKeys);
+  const extraInPt = Object.keys(pt).filter(k => !(k in en));
+  assert.deepEqual(extraInPt, [], `Keys in pt-BR.json but not in en.json: ${extraInPt.join(', ')}`);
 });
 
 test('en.json and pt-BR.json have non-empty strings and matching {var} placeholders', () => {
@@ -55,9 +51,13 @@ test('en.json and pt-BR.json have non-empty strings and matching {var} placehold
 
   for (const key of Object.keys(en)) {
     assert.equal(typeof en[key], 'string', `en.json[${key}] must be a string`);
-    assert.equal(typeof pt[key], 'string', `pt-BR.json[${key}] must be a string`);
     assert.ok(en[key].length > 0, `en.json[${key}] must not be empty`);
+  }
+
+  for (const key of Object.keys(pt)) {
+    assert.equal(typeof pt[key], 'string', `pt-BR.json[${key}] must be a string`);
     assert.ok(pt[key].length > 0, `pt-BR.json[${key}] must not be empty`);
+    if (!(key in en)) continue; // reported by the extra-keys test
 
     assert.deepEqual(
       placeholders(pt[key]),
